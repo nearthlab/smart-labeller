@@ -1,8 +1,8 @@
 import tkinter as tk
-from functools import partial
-
 import matplotlib.pyplot as plt
 import numpy as np
+
+from functools import partial
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from .drag_interpreter import DragInterpreter
@@ -227,7 +227,7 @@ Ctrl + mouse wheel up/down: zoom in/out
         plt.close(self.fig)
 
     def get_image_coordinates(self, event, dtype=int):
-        if event.inaxes == self.ax and event.xdata != None and event.ydata != None:
+        if event.inaxes == self.ax and event.xdata is not None and event.ydata is not None:
             return Point(event.xdata, event.ydata, dtype=dtype)
         else:
             return None
@@ -403,7 +403,7 @@ Ctrl + mouse wheel up/down: zoom in/out
                 )
             )
         p = self.get_image_coordinates(event, float)
-        if p != None and event.key == 'control':
+        if p is not None and event.key == 'control':
             if event.step == 1:
                 self.shrink_scope(p)
                 self.adjust_view()

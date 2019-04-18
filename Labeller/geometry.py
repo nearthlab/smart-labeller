@@ -1,8 +1,9 @@
 import cv2
 import numpy as np
+import shapely.geometry as geom
+
 from matplotlib import patches as patches
 from skimage import measure
-import shapely.geometry as geom
 
 
 class Point:
@@ -317,18 +318,16 @@ class Polygon(geom.Polygon):
     def degenerate(self):
         return not hasattr(self, 'exterior') or self.exterior is None
 
-    def get_coordinates(self, shape=None):
+    def get_coordinates(self):
         if self.degenerate():
             return np.array((), dtype=np.int32), np.array((), dtype=np.int32)
         else:
             x, y = self.exterior.xy
             x, y = np.round(x).astype(np.int32), np.round(y).astype(np.int32)
-            if shape is not None:
-                x, y = np.clip(x, 0, shape[1] - 1), np.clip(y, 0, shape[0] - 1)
             return x, y
 
-    def to_ndarray(self, shape=None):
-        x, y = self.get_coordinates(shape)
+    def to_ndarray(self):
+        x, y = self.get_coordinates()
         return np.array(list(zip(x.tolist(), y.tolist())))
 
     def simplify(self, tolerance, preserve_topology=True):
@@ -343,10 +342,6 @@ def mask_to_polygons(mask):
     # Add padding to detect the contours at the border of the image
     contours = measure.find_contours(
         np.pad(
-            # cv2.erode(
-            #     mask,
-            #     kernel=np.ones((3, 3), np.uint8)
-            # ),
             mask,
             ((1, 1), (1, 1)), 'constant', constant_values=0
         ), 0.5, positive_orientation='low'
@@ -368,18 +363,19 @@ def mask_to_polygons(mask):
 
 
 def polygons_to_mask(polys, shape):
-    return cv2.erode(
-        cv2.fillPoly(
-            np.zeros(shape, dtype=np.uint8),
-            [poly.to_ndarray(shape) for poly in polys],
-            255
-        ),
-        kernel=np.ones((3, 3), np.uint8))
-    # return cv2.fillPoly(
-    #     np.zeros(shape, dtype=np.uint8),
-    #     [poly.to_ndarray(shape) for poly in polys],
-    #     255
-    # )
+    poly_array = [poly.to_ndarray() + 1 for poly in polys]
+    h, w = shape
+    closure = cv2.fillPoly(
+        np.zeros((h + 2, w + 2), dtype=np.uint8),
+        poly_array,
+        255
+    )
+    boundary = cv2.polylines(
+        np.zeros((h + 2, w + 2), dtype=np.uint8),
+        poly_array, True, 255
+    )
+
+    return (closure - boundary)[1:h + 1, 1:w + 1]
 
 
 def extract_bbox(poly_or_mask):

@@ -41,10 +41,10 @@ class ObjectAnnotation:
         else:
             raise Exception('Too many arguments')
 
-    def json(self, shape=None):
+    def json(self):
         return {
             'class_id': self.class_id,
-            'annotation': [poly.to_ndarray(shape).tolist() for poly in self.polys]
+            'annotation': [poly.to_ndarray().tolist() for poly in self.polys]
         }
 
     def __str__(self):

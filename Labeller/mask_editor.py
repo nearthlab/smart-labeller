@@ -121,6 +121,9 @@ class MaskEditHistoryManager:
     def add_thresh_history(self, lower_thresh, upper_thresh):
         self.__action_history.append(('thresh', (lower_thresh, upper_thresh)))
 
+    def add_switch_history(self, name):
+        self.__action_history.append((name, None))
+
     def pop(self):
         if self.__len__() == 0:
             raise Exception('No history to pop')
@@ -169,25 +172,8 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         self.brush_indicator = []
         self.update_brush_panel()
 
-        # Create fillhole panel
-        self.fillhole_panel = self.fig.add_axes([(len(BrushType) + 1) * unit, 0.9, unit, unit])
-        hide_axes_labels(self.fillhole_panel)
-        self.fillhole_panel.text(
-            -0.45, -0.7,
-            'Fill Holes',
-            bbox=dict(
-                linewidth=1,
-                edgecolor='goldenrod',
-                facecolor='none',
-                alpha=1.0
-            )
-        )
-        self.fillhole_panel.imshow(np.array([[[255, 255, 224]]], dtype=np.uint8))
-        self.fillhole_switch = RadioButtons(self.fillhole_panel, ('off', 'on'))
-        self.fillhole_switch.on_clicked(lambda x: self.update_mask() or self.display())
-
         # Create largest component panel
-        self.lc_panel = self.fig.add_axes([(len(BrushType) + 2) * unit, 0.9, unit, unit])
+        self.lc_panel = self.fig.add_axes([(len(BrushType) + 1) * unit, 0.9, unit, unit])
         hide_axes_labels(self.lc_panel)
         self.lc_panel.text(
             -0.45, -0.7,
@@ -201,7 +187,7 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         )
         self.lc_panel.imshow(np.array([[[255, 255, 224]]], dtype=np.uint8))
         self.lc_switch = RadioButtons(self.lc_panel, ('off', 'on'))
-        self.lc_switch.on_clicked(lambda x: self.update_mask() or self.display())
+        self.lc_switch.on_clicked(lambda x: self.update_mask() or self.history_mgr.add_switch_history('lc') or self.display())
 
         # Create threshold sliders
         self.upper_names = ['Upper H', 'Upper S', 'Upper V']
@@ -261,18 +247,19 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             ) // 255
             self.mask *= lc_mask.astype(np.uint8)
 
-        if self.fill_holes:
-            fg = np.where(self.mask == 1, 255, 0).astype(np.uint8)
-            pfg = np.where(self.mask == 3, 255, 0).astype(np.uint8)
-
-            filled_fg = fill_holes(fg)
-            filled_pfg = fill_holes(pfg)
-            self.mask[filled_fg == 255] = 1
-            self.mask[filled_pfg == 255] = 3
-
         for brush_trace in self.history_mgr.brush_traces():
             for brush_touch in brush_trace:
                 self.mask = apply_brush_touch(self.mask, brush_touch)
+
+        # Most of the semantic/instance segmentation datasets require
+        # object masks to be simply connected (i.e. contains no holes)
+        # So fill the holes final (probably) foreground mask
+        fg = np.where(self.mask == 1, 255, 0).astype(np.uint8)
+        pfg = np.where(self.mask == 3, 255, 0).astype(np.uint8)
+        filled_fg = fill_holes(fg)
+        filled_pfg = fill_holes(pfg)
+        self.mask[filled_fg == 255] = 1
+        self.mask[filled_pfg == 255] = 3
 
     def update_brush_panel(self):
         for item in self.brush_indicator:
@@ -293,10 +280,6 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             ) for i in range(len(BrushType))
         ]
         self.refresh()
-
-    @property
-    def fill_holes(self):
-        return self.fillhole_switch.value_selected == 'on'
 
     @property
     def largest_component_only(self):
@@ -335,10 +318,10 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             self.set_image(rgb_mask)
             self.set_title('Object Mask')
         elif self.viewmode == ViewMode.MASKED_IMAGE:
-            self.set_image(cv2.bitwise_and(self.src, self.src, mask=np.where((self.mask == 1) + (self.mask == 3), 255, 0).astype(np.uint8)))
+            self.set_image(cv2.bitwise_and(self.src, self.src, mask=np.where(self.mask % 2 == 1, 255, 0).astype(np.uint8)))
             self.set_title('Foreground')
         elif self.viewmode == ViewMode.INVERSE_MASKED_IMAGE:
-            self.set_image(cv2.bitwise_and(self.src, self.src, mask=np.where((self.mask == 0) + (self.mask == 2), 255, 0).astype(np.uint8)))
+            self.set_image(cv2.bitwise_and(self.src, self.src, mask=np.where(self.mask % 2 == 0, 255, 0).astype(np.uint8)))
             self.set_title('Background')
         elif self.viewmode == ViewMode.MASK_OVERLAY:
             overlayed = np.copy(self.src)
@@ -375,6 +358,9 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
                     self.mask_src = data
                 elif action_name == 'thresh':
                     self.set_sliders(*data)
+                elif action_name == 'lc':
+                    idx = 0 if self.lc_switch.value_selected == 'off' else 1
+                    self.lc_switch.set_active(1 - idx)
                 self.update_mask()
                 self.display()
             else:
@@ -383,16 +369,16 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
     def on_mouse_press(self, event):
         super().on_mouse_press(event)
         p = self.get_image_coordinates(event)
-        if event.key == None and event.button == 3:
+        if event.key is None and event.button == 3:
             self.brush_iptr.start_dragging(p)
-        elif event.button == 1 and event.inaxes in self.slider_axes:
+        elif event.button == 1 and event.key is None and event.inaxes in self.slider_axes:
             self.on_slider_adjust = True
             self.history_mgr.add_thresh_history(self.lower_thresh, self.upper_thresh)
 
     def on_mouse_move(self, event):
         super().on_mouse_move(event)
         p = self.get_image_coordinates(event)
-        if p != None and event.key == None:
+        if p is not None and event.key is None:
             self.add_transient_patch(BrushTouch(
                 p, self.brush_iptr.radius, True, self.brush_iptr.brush
             ).patch(alpha=0.3))
@@ -405,7 +391,7 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         super().on_mouse_release(event)
         p = self.get_image_coordinates(event)
         if self.brush_iptr.on_dragging:
-            if p != None:
+            if p is not None:
                 self.brush_iptr.get_trace(p)
                 self.history_mgr.add_brush_touch_history(self.brush_iptr.history())
                 self.brush_iptr.clear()

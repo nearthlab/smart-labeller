@@ -7,7 +7,7 @@ from .drag_interpreter import DragInterpreter
 from .mask_editor import MaskEditor
 from .image_group_viewer import ImageGroupViewer
 from .partially_labelled_dataset import PartiallyLabelledDataset, ObjectAnnotation
-from .utils import random_colors, grabcut
+from .utils import random_colors, grabcut, fill_holes
 
 
 class LabelHelper(ImageGroupViewer):
@@ -17,7 +17,7 @@ w or up arrow: select the next object
 s or down arrow: select the previous object
 Ctrl + e: edit the current object mask
 Ctrl + d: delete the current object
-Shift + mouse right + dragging: add a new object
+mouse right + dragging: add a new object
     '''
 
     def __init__(self, dataset: PartiallyLabelledDataset):
@@ -86,7 +86,7 @@ Shift + mouse right + dragging: add a new object
 
     def save_current_labels(self):
         with open(self.dataset.infer_label_path(self.id), 'w') as fp:
-            json.dump([annotation.json(self.img.shape[:2]) for annotation in self.annotations], fp)
+            json.dump([annotation.json() for annotation in self.annotations], fp)
 
     def remove_current_object(self):
         if self.obj_id < len(self.annotations):
@@ -96,7 +96,7 @@ Shift + mouse right + dragging: add a new object
     def ask_class_id(self):
         return self.ask_multiple_choice_question('Which class does this object belong to?', tuple(self.dataset.class_id2name))
 
-    def mask_touch_session(self):
+    def mask_editor_session(self):
         self.disable_callbacks()
 
         if self.obj_id < len(self.annotations):
@@ -111,7 +111,7 @@ Shift + mouse right + dragging: add a new object
                 answer = self.ask_multiple_choice_question('Save edited mask as:', ('Overwrite the current object mask', 'Add as a new object', 'Do not save'))
                 if answer == 0:
                     self.annotations[self.obj_id] = ObjectAnnotation(
-                        np.where((mask == 1) + (mask == 3), 255, 0).astype('uint8'),
+                        np.where(mask % 2 == 1, 255, 0).astype('uint8'),
                         self.annotations[self.obj_id].class_id
                     )
                 elif answer == 1:
@@ -120,10 +120,11 @@ Shift + mouse right + dragging: add a new object
                         self.annotations.insert(
                             self.obj_id + 1,
                             ObjectAnnotation(
-                                np.where((mask == 1) + (mask == 3), 255, 0).astype('uint8'),
+                                np.where(mask % 2 == 1, 255, 0).astype('uint8'),
                                 class_id
                             )
                         )
+                        self.obj_id += 1
         else:
             self.show_message('Please add an object by drawing a rectangle first', 'Guide')
 
@@ -151,13 +152,13 @@ Shift + mouse right + dragging: add a new object
                 self.remove_current_object()
                 self.display()
             elif event.key == 'ctrl+e':
-                self.mask_touch_session()
+                self.mask_editor_session()
                 self.display()
 
     def on_mouse_press(self, event):
         super().on_mouse_press(event)
         p = self.get_image_coordinates(event)
-        if event.key == 'shift' and event.button == 3:
+        if event.key is None and event.button == 3:
             self.rect_ipr.start_dragging(p)
 
     def on_mouse_move(self, event):
@@ -181,14 +182,19 @@ Shift + mouse right + dragging: add a new object
             self.clear_transient_patch()
             if class_id != -1:
                 mask = grabcut(self.img, cv2.GC_INIT_WITH_RECT, rect=self.rect_ipr.rect)
-                if np.array_equal((mask == 1) + (mask == 3), np.zeros_like(mask)):
+                if np.array_equal(mask % 2 == 1, np.zeros_like(mask)):
+                    # If the initial grabcut failed to find any foreground pixels
+                    # set the mask as the rectangle region itself
                     self.annotations.append(ObjectAnnotation(
                         self.rect_ipr.rect.to_mask(mask.shape),
                         class_id
                     ))
                 else:
+                    # Most of the semantic/instance segmentation datasets require
+                    # object masks to be simply connected (i.e. contains no holes)
+                    # So fill the holes final (probably) foreground mask
                     self.annotations.append(ObjectAnnotation(
-                        np.where((mask == 1) + (mask == 3), 255, 0).astype('uint8'),
+                        fill_holes(np.where(mask % 2 == 1, 255, 0).astype('uint8')),
                         class_id
                     ))
                 self.obj_id = len(self.annotations) - 1

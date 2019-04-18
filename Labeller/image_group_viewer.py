@@ -1,5 +1,6 @@
 import os
 import tkinter as tk
+
 from abc import *
 from math import log10
 from .image_window import ImageWindow

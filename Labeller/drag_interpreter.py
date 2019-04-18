@@ -10,7 +10,7 @@ class DragInterpreterBase:
         return self.__on_dragging
 
     def start_dragging(self, p: Point):
-        if p != None:
+        if p is not None:
             self.__on_dragging = True
 
     def finish_dragging(self, p: Point):
@@ -20,11 +20,11 @@ class DragInterpreterBase:
 class DragInterpreter(DragInterpreterBase):
     def __init__(self):
         super(DragInterpreter, self).__init__()
-        self.rect = Rectangle()
-        self.p1 = self.rect.tl_corner
-        self.p2 = self.rect.br_corner
+        self.p1 = Point(0, 0)
+        self.p2 = Point(-1, -1)
 
-    def infer_rect(self):
+    @property
+    def rect(self):
         tl = Point(
             min(self.p1.x, self.p2.x),
             min(self.p1.y, self.p2.y)
@@ -37,15 +37,13 @@ class DragInterpreter(DragInterpreterBase):
 
     def start_dragging(self, p: Point):
         super(DragInterpreter, self).start_dragging(p)
-        if p != None:
+        if p is not None:
             self.p1 = p
             self.p2 = p
-            self.rect = self.infer_rect()
 
     def update(self, p: Point):
-        if p != None:
+        if p is not None:
             self.p2 = p
-            self.rect = self.infer_rect()
 
     def finish_dragging(self, p: Point):
         super(DragInterpreter, self).finish_dragging(p)

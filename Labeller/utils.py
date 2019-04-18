@@ -1,5 +1,6 @@
 import colorsys
 import random
+import warnings
 import cv2
 import numpy as np
 
@@ -19,15 +20,8 @@ def preprocess_mask(mask):
     prob_mask = mask // 255 + 2
     # pixels outside of the bounding box are surely BG
     prob_mask[bbox.to_mask(prob_mask.shape) == 0] = 0
+
     return prob_mask
-
-
-def extract_foreground(gc_mask):
-    return np.where(gc_mask % 2 == 1, 255, 0).astype(np.uint8)
-
-
-def extract_background(gc_mask):
-    return np.where(gc_mask % 2 == 0, 255, 0).astype(np.uint8)
 
 
 def grabcut(img, mode, mask=None, rect=None):
@@ -87,16 +81,19 @@ def threshold(src, lb, ub):
 
 def fill_holes(mask):
     h, w = mask.shape[:2]
-    m = np.zeros((h + 2, w + 2), np.uint8)
-    flood_filled = mask.copy()
+    m = np.zeros((h + 4, w + 4), np.uint8)
+    flood_filled = np.pad(
+        mask, ((1, 1), (1, 1)),
+        mode='constant', constant_values=0
+    )
     cv2.floodFill(flood_filled, m, (0, 0), 255)
-    return mask | cv2.bitwise_not(flood_filled)
+    return mask | cv2.bitwise_not(flood_filled[1:h + 1, 1:w + 1])
 
 
 class ConnectedComponents:
     def __init__(self, mask: np.ndarray):
-        numLabels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask)
-        self.__idx = sorted(list(range(1, numLabels)), key=lambda i: stats[i][cv2.CC_STAT_AREA], reverse=True)
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask)
+        self.__idx = sorted(list(range(1, num_labels)), key=lambda i: stats[i][cv2.CC_STAT_AREA], reverse=True)
         self.__labels = np.array(labels)
         self.__stats = np.array(stats)
         self.__centroids = np.array(centroids)
@@ -124,4 +121,9 @@ class ConnectedComponents:
 
 
 def largest_connected_component(mask: np.ndarray):
-    return ConnectedComponents(mask).mask(0)
+    connected_components = ConnectedComponents(mask)
+    if len(connected_components) == 0:
+        warnings.warn('Couldn\'t find any connected component in the foreground')
+        return connected_components.background()
+    else:
+        return connected_components.mask(0)
