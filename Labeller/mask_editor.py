@@ -9,7 +9,9 @@ from matplotlib.widgets import Slider, RadioButtons
 
 from .image_window import ImageWindow
 from .geometry import Point
-from .utils import hide_axes_labels, preprocess_mask, grabcut, overlay_mask, threshold
+from .utils import (hide_axes_labels, preprocess_mask,
+                    grabcut, overlay_mask, threshold,
+                    fill_holes, largest_connected_component)
 from .drag_interpreter import DragInterpreterBase
 
 
@@ -19,14 +21,11 @@ class ViewMode(enum.Enum):
     INVERSE_MASKED_IMAGE = 2
     MASK_OVERLAY = 3
 
-
     def __add__(self, other: int):
         return ViewMode((self.value + other) % len(ViewMode))
 
-
     def __sub__(self, other: int):
         return self.__add__(-other)
-
 
 
 class BrushType(enum.Enum):
@@ -40,10 +39,9 @@ class BrushType(enum.Enum):
     @classmethod
     def val2color(cls, val):
         return {
-            brush_type.value['val'] : np.array(brush_type.value['color'])
+            brush_type.value['val']: np.array(brush_type.value['color'])
             for brush_type in cls.__members__.values()
         }[val]
-
 
     @classmethod
     def val2name(cls, val):
@@ -52,7 +50,6 @@ class BrushType(enum.Enum):
             for brush_type in cls.__members__.values()
         }[val]
 
-
     def __add__(self, other: int):
         val = (self.value['val'] + other) % len(BrushType)
         return {
@@ -60,10 +57,8 @@ class BrushType(enum.Enum):
             for brush_type in BrushType.__members__.values()
         }[val]
 
-
     def __sub__(self, other: int):
         return self.__add__(-other)
-
 
 
 class BrushInterpreter(DragInterpreterBase):
@@ -73,20 +68,16 @@ class BrushInterpreter(DragInterpreterBase):
         self.brush = BrushType.BG
         self.brush_trace = []
 
-
     def get_trace(self, p):
         trace = BrushTouch(p, self.radius, True, self.brush)
         self.brush_trace.append(trace)
         return trace
 
-
     def history(self):
         return copy.deepcopy(self.brush_trace)
 
-
     def clear(self):
         self.brush_trace.clear()
-
 
 
 class BrushTouch:
@@ -96,9 +87,8 @@ class BrushTouch:
         self.solid = solid
         self.brush = brush
 
-
     def patch(self, alpha=1.0):
-        color = [val/255 for val in self.brush.value['color']]
+        color = [val / 255 for val in self.brush.value['color']]
         color.append(alpha)
         color = tuple(color)
         return patches.Circle(
@@ -109,34 +99,27 @@ class BrushTouch:
         )
 
 
-
 def apply_brush_touch(img: np.ndarray, brush_touch: BrushTouch):
     key = 'val' if img.ndim == 2 else 'color'
     return cv2.circle(img, tuple(brush_touch.center), brush_touch.radius, brush_touch.brush.value[key], -1 if brush_touch.solid else 1)
 
 
-
-class MaskModifyHistoryManager:
+class MaskEditHistoryManager:
 
     def __init__(self):
         self.__action_history = []
 
-
     def __len__(self):
         return len(self.__action_history)
-
 
     def add_brush_touch_history(self, brush_trace):
         self.__action_history.append(('brush', copy.deepcopy(brush_trace)))
 
-
     def add_grabcut_history(self, mask):
         self.__action_history.append(('grabcut', np.copy(mask)))
 
-
     def add_thresh_history(self, lower_thresh, upper_thresh):
         self.__action_history.append(('thresh', (lower_thresh, upper_thresh)))
-
 
     def pop(self):
         if self.__len__() == 0:
@@ -144,13 +127,11 @@ class MaskModifyHistoryManager:
         else:
             return self.__action_history.pop(-1)
 
-
     def brush_traces(self):
         return [h[1] for h in self.__action_history if h[0] == 'brush']
 
 
-
-class MaskModifier(ImageWindow):
+class MaskEditor(ImageWindow):
     '''
 <Basic Actions>
 a/d: switch to previous/next view mode
@@ -169,7 +150,6 @@ Ctrl + g: run grabcut with current mask
 Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
     '''
 
-
     def __init__(self, img: np.ndarray, mask: np.ndarray, win_title=None):
         super().__init__(win_title, (0.05, 0.18, 0.9, 0.7))
         self.src = np.copy(img)
@@ -178,19 +158,20 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         self.mask = np.copy(self.mask_src)
         self.viewmode = ViewMode.MASK
         self.brush_iptr = BrushInterpreter()
-        self.history_mgr = MaskModifyHistoryManager()
+        self.history_mgr = MaskEditHistoryManager()
         self.save_result = False
 
         unit = 0.06
-        self.brush_panel = self.fig.add_axes([unit, 0.9, len(BrushType)*unit, unit])
+        # Create brush panel
+        self.brush_panel = self.fig.add_axes([unit, 0.9, len(BrushType) * unit, unit])
         hide_axes_labels(self.brush_panel)
         self.brush_panel.imshow(np.array([[BrushType.val2color(i) for i in range(len(BrushType))]]))
         self.brush_indicator = []
         self.update_brush_panel()
 
-        self.fillhole_panel = self.fig.add_axes([(len(BrushType)+1)*unit, 0.9, unit, unit])
+        # Create fillhole panel
+        self.fillhole_panel = self.fig.add_axes([(len(BrushType) + 1) * unit, 0.9, unit, unit])
         hide_axes_labels(self.fillhole_panel)
-        self.fillhole_panel.patch.set_facecolor('lightgoldenrodyellow')
         self.fillhole_panel.text(
             -0.45, -0.7,
             'Fill Holes',
@@ -202,14 +183,31 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             )
         )
         self.fillhole_panel.imshow(np.array([[[255, 255, 224]]], dtype=np.uint8))
-        self.fillhole_switch = RadioButtons(self.fillhole_panel, ('on', 'off'))
+        self.fillhole_switch = RadioButtons(self.fillhole_panel, ('off', 'on'))
         self.fillhole_switch.on_clicked(lambda x: self.update_mask() or self.display())
 
+        # Create largest component panel
+        self.lc_panel = self.fig.add_axes([(len(BrushType) + 2) * unit, 0.9, unit, unit])
+        hide_axes_labels(self.lc_panel)
+        self.lc_panel.text(
+            -0.45, -0.7,
+            'Largest Component Only',
+            bbox=dict(
+                linewidth=1,
+                edgecolor='goldenrod',
+                facecolor='none',
+                alpha=1.0
+            )
+        )
+        self.lc_panel.imshow(np.array([[[255, 255, 224]]], dtype=np.uint8))
+        self.lc_switch = RadioButtons(self.lc_panel, ('off', 'on'))
+        self.lc_switch.on_clicked(lambda x: self.update_mask() or self.display())
+
+        # Create threshold sliders
         self.upper_names = ['Upper H', 'Upper S', 'Upper V']
         self.lower_names = ['Lower H', 'Lower S', 'Lower V']
         self.min_values = np.array([0, 0, 0])
         self.max_values = np.array([179, 255, 255])
-
         self.sliders = {}
         self.slider_axes = []
         self.on_slider_adjust = False
@@ -228,11 +226,9 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             self.slider_axes.append(upper_slider_ax)
         self.display()
 
-
     def mainloop(self):
         super().mainloop()
         return self.mask if self.save_result else None
-
 
     def run_grabcut(self):
         gc_mask = grabcut(self.src, cv2.GC_INIT_WITH_MASK, mask=self.mask)
@@ -243,37 +239,40 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         self.update_mask()
         self.display()
 
-
     @property
     def lower_thresh(self):
         return [self.sliders[self.lower_names[i]].val for i in range(3)]
-
 
     @property
     def upper_thresh(self):
         return [self.sliders[self.upper_names[i]].val for i in range(3)]
 
-
     def update_mask(self):
         thresh_mask = np.zeros(self.src.shape, dtype=np.uint8)
         for i in range(3):
             thresh_mask[:, :, i] = threshold(self.src_hsv[:, :, i], self.lower_thresh[i], self.upper_thresh[i])
-        thresh_mask = np.amin(thresh_mask, axis=-1)
+        thresh_mask = np.amin(thresh_mask, axis=-1) // 255
 
-        if self.do_fillhole:
-            h, w = thresh_mask.shape[:2]
-            m = np.zeros((h + 2, w + 2), np.uint8)
-            m_floodfill = thresh_mask.copy()
-            cv2.floodFill(m_floodfill, m, (0,0), 255)
-            thresh_mask = thresh_mask | cv2.bitwise_not(m_floodfill)
-
-        thresh_mask //= 255
         self.mask = self.mask_src * thresh_mask
+
+        if self.largest_component_only:
+            lc_mask = largest_connected_component(
+                np.where(self.mask % 2 == 1, 255, 0).astype(np.uint8)
+            ) // 255
+            self.mask *= lc_mask.astype(np.uint8)
+
+        if self.fill_holes:
+            fg = np.where(self.mask == 1, 255, 0).astype(np.uint8)
+            pfg = np.where(self.mask == 3, 255, 0).astype(np.uint8)
+
+            filled_fg = fill_holes(fg)
+            filled_pfg = fill_holes(pfg)
+            self.mask[filled_fg == 255] = 1
+            self.mask[filled_pfg == 255] = 3
 
         for brush_trace in self.history_mgr.brush_traces():
             for brush_touch in brush_trace:
                 self.mask = apply_brush_touch(self.mask, brush_touch)
-
 
     def update_brush_panel(self):
         for item in self.brush_indicator:
@@ -295,11 +294,13 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         ]
         self.refresh()
 
-
     @property
-    def do_fillhole(self):
+    def fill_holes(self):
         return self.fillhole_switch.value_selected == 'on'
 
+    @property
+    def largest_component_only(self):
+        return self.lc_switch.value_selected == 'on'
 
     def slider_callback(self, idx, pos, val):
         assert pos in ['upper', 'lower']
@@ -319,14 +320,12 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             if self.lower_thresh[idx] > self.upper_thresh[idx]:
                 self.sliders[other_name].set_val(val)
 
-
     def set_sliders(self, lower_thresh, upper_thresh):
         for i, vals in enumerate(zip(lower_thresh, upper_thresh)):
             self.sliders[self.lower_names[i]].set_val(vals[0])
             self.sliders[self.upper_names[i]].set_val(vals[1])
         self.update_mask()
         self.refresh()
-
 
     def display(self):
         if self.viewmode == ViewMode.MASK:
@@ -349,7 +348,6 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             self.set_title('Mask Overlayed Image')
         else:
             raise ValueError('Invalid viewmode: {}'.format(self.viewmode))
-
 
     def on_key_press(self, event):
         super().on_key_press(event)
@@ -382,7 +380,6 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             else:
                 self.show_message('No history to recover', 'Guide')
 
-
     def on_mouse_press(self, event):
         super().on_mouse_press(event)
         p = self.get_image_coordinates(event)
@@ -391,7 +388,6 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         elif event.button == 1 and event.inaxes in self.slider_axes:
             self.on_slider_adjust = True
             self.history_mgr.add_thresh_history(self.lower_thresh, self.upper_thresh)
-
 
     def on_mouse_move(self, event):
         super().on_mouse_move(event)
@@ -404,7 +400,6 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             if self.brush_iptr.on_dragging:
                 trace = self.brush_iptr.get_trace(p)
                 self.add_patch(trace.patch())
-
 
     def on_mouse_release(self, event):
         super().on_mouse_release(event)
@@ -424,7 +419,6 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             self.update_mask()
             self.display()
 
-
     def on_scroll(self, event):
         super().on_scroll(event)
         if event.key is None:
@@ -433,5 +427,3 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             elif self.brush_iptr.radius > 1:
                 self.brush_iptr.radius -= 1
             self.refresh()
-
-

@@ -12,6 +12,7 @@ class ImageGroupViewer(ImageWindow, metaclass=ABCMeta):
 a or left arrow: go to the previous image
 d or right arrow: go to the next image
     '''
+
     def __init__(self, items: list, win_title=None):
         super(ImageGroupViewer, self).__init__(win_title)
         self.items = items
@@ -31,19 +32,15 @@ d or right arrow: go to the next image
         self.enable_menubar()
         self.force_focus()
 
-
     def enable_menubar(self):
         self.image_menubar.bind(self.on_image_menubar_select)
-
 
     def disable_menubar(self):
         self.image_menubar.unbind()
 
-
     @property
     def num_items(self):
         return len(self.items)
-
 
     def should_update(self):
         if self.prev_id == self.id:
@@ -55,7 +52,6 @@ d or right arrow: go to the next image
             self.prev_id = self.id
             return True
 
-
     def on_image_menubar_select(self, event):
         if self.callbacks_alive:
             # Note here that Tkinter passes an event object to onselect()
@@ -65,16 +61,13 @@ d or right arrow: go to the next image
                 self.display()
                 self.force_focus()
 
-
     def mainloop(self):
         super(ImageGroupViewer, self).mainloop()
         self.image_menubar.mainloop()
 
-
     def close(self):
         super(ImageGroupViewer, self).close()
         self.image_menubar.close()
-
 
     @abstractmethod
     def display(self):
@@ -89,12 +82,9 @@ d or right arrow: go to the next image
         if self.num_items == 0:
             raise Exception('No images to display')
 
-
     def on_key_press(self, event):
         super(ImageGroupViewer, self).on_key_press(event)
         if event.key in ['left', 'a']:
             self.id = (self.id - 1) % self.num_items
         elif event.key in ['right', 'd']:
             self.id = (self.id + 1) % self.num_items
-
-

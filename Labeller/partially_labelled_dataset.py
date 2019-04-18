@@ -41,37 +41,30 @@ class ObjectAnnotation:
         else:
             raise Exception('Too many arguments')
 
-
     def json(self, shape=None):
         return {
             'class_id': self.class_id,
             'annotation': [poly.to_ndarray(shape).tolist() for poly in self.polys]
         }
 
-
     def __str__(self):
         return json.dumps(self.json())
-
 
     @property
     def bbox(self):
         return extract_bbox_multi(self.polys)
 
-
     def mask(self, shape):
         return polygons_to_mask(self.polys, shape)
 
-
     def is_empty(self):
         return len(self.polys) == 0 or self.class_id == -1
-
 
 
 # annos: list of ObjectAnnotation objects
 def dump_annotations(annos, file_path):
     with open(file_path, 'w') as fp:
         json.dump([a.json() for a in annos], fp)
-
 
 
 def load_annotations(file_path):
@@ -84,7 +77,6 @@ def load_annotations(file_path):
     return annos
 
 
-
 class PartiallyLabelledDataset:
     def __init__(self):
         self.root = None
@@ -93,20 +85,16 @@ class PartiallyLabelledDataset:
         self.class_name2id = []
         self.num_classes = 0
 
-
     @property
     def num_images(self):
         return len(self.image_files)
-
 
     @property
     def name(self):
         return os.path.basename(self.root)
 
-
     def __len__(self):
         return self.num_images
-
 
     def load(self, dataset_dir, filter_unlabelled=False):
         assert os.path.isdir(dataset_dir), 'No such directory: {}'.format(dataset_dir)
@@ -132,14 +120,11 @@ class PartiallyLabelledDataset:
             self.class_name2id = {name: id for id, name in enumerate(self.class_id2name)}
             self.num_classes = len(self.class_id2name)
 
-
     def infer_label_path(self, id):
         return os.path.join(self.label_dir, os.path.basename(self.image_files[id])[:-4] + '.json')
 
-
     def load_image(self, id):
         return imread(self.image_files[id])
-
 
     def load_annotations(self, id):
         label_path = self.infer_label_path(id)

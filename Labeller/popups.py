@@ -2,7 +2,6 @@ import tkinter as tk
 from functools import partial
 
 
-
 class MessageBox:
     def __init__(self, msg, cx, cy, title):
         self.root = tk.Tk()
@@ -26,15 +25,12 @@ class MessageBox:
         tk.Button(self.root, text='Ok', command=self.close).pack()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
-
     def close(self):
         self.root.quit()
         self.root.destroy()
 
-
     def mainloop(self):
         self.root.mainloop()
-
 
 
 class MultipleChoiceQuestionAsker:
@@ -44,7 +40,7 @@ class MultipleChoiceQuestionAsker:
         self.root.geometry('{}x{}+{}+{}'.format(width, height, cx - width // 2, cy - height // 2))
         self.value = -1
 
-        tk.Label(self.root, text=prompt, wraplength=4*width//5).pack()
+        tk.Label(self.root, text=prompt, wraplength=4 * width // 5).pack()
         for i, option in enumerate(options):
             tk.Radiobutton(self.root, text=option, value=i, command=partial(self.set_value, v=i)).pack(anchor="w")
 
@@ -68,7 +64,6 @@ class MultipleChoiceQuestionAsker:
         return self.value
 
 
-
 class YesNoQuestionAsker:
     def __init__(self, prompt: str, cx, cy, title='Options', width=200, height=100):
         self.root = tk.Tk()
@@ -76,23 +71,20 @@ class YesNoQuestionAsker:
         self.root.geometry('{}x{}+{}+{}'.format(width, height, cx - width // 2, cy - height // 2))
         self.value = None
 
-        tk.Label(self.root, text=prompt, wraplength=4*width//5).pack()
+        tk.Label(self.root, text=prompt, wraplength=4 * width // 5).pack()
 
         tk.Button(self.root, text="Yes", command=partial(self.set_value, v=True)).pack()
         tk.Button(self.root, text="No", command=partial(self.set_value, v=False)).pack()
         self.root.protocol("WM_DELETE_WINDOW", partial(self.set_value, v=False))
-
 
     def set_value(self, v):
         self.value = v
         self.root.quit()
         self.root.destroy()
 
-
     def mainloop(self):
         self.root.mainloop()
         return self.value
-
 
 
 class ScrollableMenubar():
@@ -112,25 +104,20 @@ class ScrollableMenubar():
         self.root.protocol("WM_DELETE_WINDOW", lambda: None)
         self.root.grab_set()
 
-
     def mainloop(self):
         self.root.mainloop()
-
 
     def bind(self, on_select):
         if on_select is not None:
             self.listbox.bind('<<ListboxSelect>>', on_select)
         self.root.deiconify()
 
-
     def unbind(self):
         self.listbox.unbind('<<ListboxSelect>>')
         self.root.withdraw()
 
-
     def set_title(self, title):
         self.root.title(title)
-
 
     def close(self):
         self.root.quit()

@@ -3,7 +3,6 @@ from skimage.io import imread
 from .image_group_viewer import ImageGroupViewer
 
 
-
 class ImageViewer(ImageGroupViewer):
     def __init__(self, directory):
         super(ImageViewer, self).__init__(
@@ -14,7 +13,6 @@ class ImageViewer(ImageGroupViewer):
             os.path.basename(directory)
         )
         self.display()
-
 
     def display(self):
         super(ImageViewer, self).display()
@@ -29,7 +27,6 @@ class ImageViewer(ImageGroupViewer):
                 self.num_items
             )
             self.set_title(title)
-
 
     def on_key_press(self, event):
         super().on_key_press(event)

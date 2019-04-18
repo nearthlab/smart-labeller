@@ -4,11 +4,10 @@ import json
 import numpy as np
 
 from .drag_interpreter import DragInterpreter
-from .mask_modifier import MaskModifier
+from .mask_editor import MaskEditor
 from .image_group_viewer import ImageGroupViewer
 from .partially_labelled_dataset import PartiallyLabelledDataset, ObjectAnnotation
 from .utils import random_colors, grabcut
-
 
 
 class LabelHelper(ImageGroupViewer):
@@ -20,6 +19,7 @@ Ctrl + e: edit the current object mask
 Ctrl + d: delete the current object
 Shift + mouse right + dragging: add a new object
     '''
+
     def __init__(self, dataset: PartiallyLabelledDataset):
         assert dataset.root is not None, 'The dataset passed to LabelHelper is not loaded properly'
         super().__init__(
@@ -34,10 +34,8 @@ Shift + mouse right + dragging: add a new object
 
         self.display()
 
-
     def set_items(self):
         return self.dataset.image_files
-
 
     def display(self):
         super().display()
@@ -53,10 +51,10 @@ Shift + mouse right + dragging: add a new object
             color = self.pallete[obj_id]
             bbox = annotation.bbox
             self.add_patch(bbox.to_patch(
-                    linewidth=linewidth,
-                    edgecolor=color,
-                    facecolor='none'
-                ))
+                linewidth=linewidth,
+                edgecolor=color,
+                facecolor='none'
+            ))
             for poly in annotation.polys:
                 self.add_patch(
                     poly.to_patch(
@@ -64,14 +62,13 @@ Shift + mouse right + dragging: add a new object
                         linewidth=linewidth,
                         edgecolor=color,
                         facecolor=(*color, alpha),
-                ))
+                    ))
             self.patches.append(self.ax.text(
                 *bbox.tl_corner,
                 '{}. {}'.format(obj_id, self.dataset.class_id2name[self.annotations[obj_id].class_id]),
                 bbox=dict(facecolor=color, alpha=alpha)
             ))
 
-        
         title = 'FILENAME: {} | IMAGE ID: {} | OBJECT ID: {} | OBJECT CLASS: {}'.format(
             os.path.basename(self.dataset.image_files[self.id]),
             self.id,
@@ -83,26 +80,21 @@ Shift + mouse right + dragging: add a new object
         )
         self.set_title(title)
 
-
     def on_image_menubar_select(self, event):
         super().on_image_menubar_select(event)
         self.save_current_labels()
 
-
     def save_current_labels(self):
         with open(self.dataset.infer_label_path(self.id), 'w') as fp:
             json.dump([annotation.json(self.img.shape[:2]) for annotation in self.annotations], fp)
-
 
     def remove_current_object(self):
         if self.obj_id < len(self.annotations):
             del self.annotations[self.obj_id]
             self.obj_id = max(0, len(self.annotations) - 1)
 
-
     def ask_class_id(self):
         return self.ask_multiple_choice_question('Which class does this object belong to?', tuple(self.dataset.class_id2name))
-
 
     def mask_touch_session(self):
         self.disable_callbacks()
@@ -110,7 +102,7 @@ Shift + mouse right + dragging: add a new object
         if self.obj_id < len(self.annotations):
             self.disable_menubar()
             self.iconify()
-            mask_touch_helper = MaskModifier(self.img, self.annotations[self.obj_id].mask(self.img.shape[:2]))
+            mask_touch_helper = MaskEditor(self.img, self.annotations[self.obj_id].mask(self.img.shape[:2]))
             mask = mask_touch_helper.mainloop()
             self.deiconify()
             self.enable_menubar()
@@ -138,7 +130,6 @@ Shift + mouse right + dragging: add a new object
         self.enable_callbacks()
         self.force_focus()
 
-
     def on_key_press(self, event):
         if event.key in ['left', 'right', 'a', 'd', 'escape']:
             self.save_current_labels()
@@ -163,13 +154,11 @@ Shift + mouse right + dragging: add a new object
                 self.mask_touch_session()
                 self.display()
 
-
     def on_mouse_press(self, event):
         super().on_mouse_press(event)
         p = self.get_image_coordinates(event)
         if event.key == 'shift' and event.button == 3:
             self.rect_ipr.start_dragging(p)
-
 
     def on_mouse_move(self, event):
         super().on_mouse_move(event)
@@ -182,7 +171,6 @@ Shift + mouse right + dragging: add a new object
                 edgecolor='b',
                 facecolor='none'
             ))
-
 
     def on_mouse_release(self, event):
         super().on_mouse_release(event)
@@ -205,4 +193,3 @@ Shift + mouse right + dragging: add a new object
                     ))
                 self.obj_id = len(self.annotations) - 1
                 self.display()
-

@@ -1,12 +1,14 @@
 import tkinter as tk
-import numpy as np
-import matplotlib.pyplot as plt
-
 from functools import partial
+
+import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
 from .drag_interpreter import DragInterpreter
-from .popups import MessageBox, MultipleChoiceQuestionAsker, YesNoQuestionAsker
 from .geometry import Point, Rectangle, get_rect, grow_rect, translate_rect
+from .popups import MessageBox, MultipleChoiceQuestionAsker, YesNoQuestionAsker
+
 
 # named colors in matplotlib: https://stackoverflow.com/questions/22408237/named-colors-in-matplotlib
 # tk.TclError is raised when canvas.draw() is called while canvas is already closed by the user
@@ -74,7 +76,6 @@ Ctrl + mouse wheel up/down: zoom in/out
             s += cls.__doc__
         return s
 
-
     def __init__(self, win_title=None, axes_pos=DEFAULT_AXES_POSITION):
         self.verbose = False
         self.root = tk.Tk()
@@ -108,14 +109,11 @@ Ctrl + mouse wheel up/down: zoom in/out
         self.patches = []
         self.transient_patches = []
 
-
     def refresh(self):
         self.fig.canvas.draw_idle()
 
-
     def force_focus(self):
         self.fig.canvas.get_tk_widget().focus_force()
-
 
     def set_image(self, img: np.ndarray):
         self.img_rect = get_rect(img)
@@ -123,10 +121,8 @@ Ctrl + mouse wheel up/down: zoom in/out
         self.ax.imshow(img)
         self.adjust_view()
 
-
     def set_title(self, title: str):
         self.root.title(title)
-
 
     def adjust_view(self):
         r = self.roi()
@@ -141,7 +137,6 @@ Ctrl + mouse wheel up/down: zoom in/out
         )
         self.refresh()
 
-
     def get_scope(self, rect: Rectangle):
         return Rectangle(
             rect.left / self.img_rect.width(),
@@ -150,7 +145,6 @@ Ctrl + mouse wheel up/down: zoom in/out
             rect.bottom / self.img_rect.height(),
             dtype=float
         )
-
 
     def roi(self):
         subr = (
@@ -161,9 +155,9 @@ Ctrl + mouse wheel up/down: zoom in/out
         )
         return Rectangle(*subr)
 
-
     def grow_scope(self, p: Point):
         c = self.scope.center()
+        p = Point(p.x / self.img_rect.width(), p.y / self.img_rect.height(), dtype=float)
 
         delta_tl = (self.scope.tl_corner - c)
         tl = c + (delta_tl.length() + 0.01) * delta_tl.normalize()
@@ -171,10 +165,7 @@ Ctrl + mouse wheel up/down: zoom in/out
         delta_br = (self.scope.br_corner - c)
         br = c + (delta_br.length() + 0.01) * delta_br.normalize()
 
-        p = Point(p.x / self.img_rect.width(), p.y / self.img_rect.height(), dtype=float)
-
-        self.scope = translate_rect(Rectangle(tl.x, tl.y, br.x, br.y, dtype=float), (p-c)/10)
-
+        self.scope = translate_rect(Rectangle(tl.x, tl.y, br.x, br.y, dtype=float), (p - c) / 10)
 
     def shrink_scope(self, p: Point):
         c = self.scope.center()
@@ -188,20 +179,17 @@ Ctrl + mouse wheel up/down: zoom in/out
 
         p = Point(p.x / self.img_rect.width(), p.y / self.img_rect.height(), dtype=float)
 
-        self.scope = translate_rect(Rectangle(tl.x, tl.y, br.x, br.y, dtype=float), (p-c)/10)
-
+        self.scope = translate_rect(Rectangle(tl.x, tl.y, br.x, br.y, dtype=float), (p - c) / 10)
 
     def translate_scope(self, p1, p2):
         p1 = Point(p1.x / self.img_rect.width(), p1.y / self.img_rect.height(), dtype=float)
         p2 = Point(p2.x / self.img_rect.width(), p2.y / self.img_rect.height(), dtype=float)
         self.scope = translate_rect(self.scope, p1 - p2)
 
-
     def add_transient_patch(self, patch):
         self.transient_patches.append(patch)
         self.ax.add_patch(patch)
         self.refresh()
-
 
     def clear_transient_patch(self):
         for i in range(len(self.transient_patches)):
@@ -210,23 +198,19 @@ Ctrl + mouse wheel up/down: zoom in/out
         self.transient_patches.clear()
         self.refresh()
 
-
     def add_patch(self, patch, erasable=True):
         if erasable:
             self.patches.append(patch)
         self.ax.add_patch(patch)
         self.refresh()
 
-
     def hide_patches(self):
         for patch in self.patches:
             patch.set_visible(False)
 
-
     def show_patches(self):
         for patch in self.patches:
             patch.set_visible(True)
-
 
     def clear_patches(self):
         for i in range(len(self.patches)):
@@ -235,7 +219,6 @@ Ctrl + mouse wheel up/down: zoom in/out
         self.patches.clear()
         self.refresh()
 
-
     def close(self):
         for cid in self.cids:
             self.fig.canvas.mpl_disconnect(cid)
@@ -243,18 +226,15 @@ Ctrl + mouse wheel up/down: zoom in/out
         self.root.destroy()
         plt.close(self.fig)
 
-
     def get_image_coordinates(self, event, dtype=int):
         if event.inaxes == self.ax and event.xdata != None and event.ydata != None:
             return Point(event.xdata, event.ydata, dtype=dtype)
         else:
             return None
 
-
     def mainloop(self):
         self.root.mainloop()
         return 0
-
 
     def enable_callbacks(self):
         self.cids.append(
@@ -288,25 +268,20 @@ Ctrl + mouse wheel up/down: zoom in/out
             self.fig.canvas.mpl_connect('axes_leave_event', partial(on_leave_axes, self.verbose))
         )
 
-
     def disable_callbacks(self):
         for cid in self.cids:
             self.fig.canvas.mpl_disconnect(cid)
         self.cids.clear()
 
-
     def iconify(self):
         self.root.withdraw()
-
 
     def deiconify(self):
         self.root.deiconify()
 
-
     @property
     def callbacks_alive(self):
         return len(self.cids) > 0
-
 
     @property
     def window_center(self):
@@ -314,7 +289,6 @@ Ctrl + mouse wheel up/down: zoom in/out
             self.root.winfo_x() + self.root.winfo_width() // 2,
             self.root.winfo_y() + self.root.winfo_height() // 2
         )
-
 
     def ask_multiple_choice_question(self, question: str, options: tuple):
         self.disable_callbacks()
@@ -327,7 +301,6 @@ Ctrl + mouse wheel up/down: zoom in/out
 
         return answer
 
-
     def ask_yes_no_question(self, question: str):
         self.disable_callbacks()
         asker = YesNoQuestionAsker(question, *self.window_center)
@@ -336,13 +309,11 @@ Ctrl + mouse wheel up/down: zoom in/out
 
         return answer
 
-
     def show_message(self, msg, title):
         self.disable_callbacks()
         notifier = MessageBox(msg, *self.window_center, title)
         notifier.mainloop()
         self.enable_callbacks()
-
 
     def on_key_press(self, event):
         if event.key == 'escape':
@@ -355,11 +326,9 @@ Ctrl + mouse wheel up/down: zoom in/out
         if self.verbose:
             print('press', event.key)
 
-
     def on_key_release(self, event):
         if self.verbose:
             print('release', event.key)
-
 
     def on_mouse_press(self, event):
         p = self.get_image_coordinates(event, float)
@@ -374,10 +343,9 @@ Ctrl + mouse wheel up/down: zoom in/out
                 .format(event.xdata, event.ydata) %
                 (
                     'double' if event.dblclick else 'single',
-                    event.button,event.x, event.y, event.key
+                    event.button, event.x, event.y, event.key
                 )
             )
-
 
     def on_mouse_move(self, event):
         if self.verbose:
@@ -404,7 +372,6 @@ Ctrl + mouse wheel up/down: zoom in/out
                 )
             )
 
-
     def on_mouse_release(self, event):
         if self.verbose:
             print(
@@ -426,7 +393,6 @@ Ctrl + mouse wheel up/down: zoom in/out
             self.scope = self.get_scope(self.zoom_iptr.rect)
             self.adjust_view()
 
-
     def on_scroll(self, event):
         if self.verbose:
             print(
@@ -444,4 +410,3 @@ Ctrl + mouse wheel up/down: zoom in/out
             else:
                 self.grow_scope(p)
                 self.adjust_view()
-
