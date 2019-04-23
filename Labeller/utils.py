@@ -7,11 +7,14 @@ import numpy as np
 from .geometry import Point, Rectangle, extract_bbox
 
 
-def hide_axes_labels(axes):
-    axes.set_yticklabels([])
-    axes.set_xticklabels([])
-    axes.get_xaxis().set_visible(False)
-    axes.get_yaxis().set_visible(False)
+def hide_axes_labels(axes, hide='xy'):
+    if 'x' in hide:
+        axes.set_xticklabels([])
+        axes.get_xaxis().set_visible(False)
+
+    if 'y' in hide:
+        axes.set_yticklabels([])
+        axes.get_yaxis().set_visible(False)
 
 
 def preprocess_mask(mask):
@@ -73,10 +76,138 @@ def overlay_mask(image, mask, color, alpha=0.5):
     return image
 
 
-def threshold(src, lb, ub):
-    _, lb_mask = cv2.threshold(src, lb - 1, 255, cv2.THRESH_BINARY)
-    _, ub_mask = cv2.threshold(src, ub + 1, 255, cv2.THRESH_BINARY_INV)
-    return np.minimum(lb_mask, ub_mask)
+class Range:
+    MIN = 0
+    MAX = 1
+    NORM_RANGE = 1
+
+    def __init__(self, minval=None, maxval=None):
+        minval = minval or self.__class__.MIN
+        maxval = maxval or self.__class__.MAX
+
+        self.__inside = minval <= maxval
+        if not self.__inside:
+            minval, maxval = maxval, minval
+        self.__min = max(self.__class__.MIN, minval)
+        self.__max = min(self.__class__.MAX, maxval)
+
+    @property
+    def min(self):
+        return self.__min
+
+    @property
+    def max(self):
+        return self.__max
+
+    @property
+    def inside(self):
+        return self.__inside
+
+    def __repr__(self):
+        if self.__inside:
+            return '[{}, {}]'.format(self.__min, self.__max)
+        else:
+            return '[{}, {}] U [{}, {}]'.format(self.__class__.MIN, self.__min, self.__max, self.__class__.MAX + 1)
+
+    def get_ranges(self, step):
+        return [np.arange(self.__min / self.__class__.MAX * self.__class__.NORM_RANGE, (self.__max + 1) / self.__class__.MAX * self.__class__.NORM_RANGE, step)] if self.__inside \
+            else [np.arange(self.__class__.MIN / self.__class__.MAX * self.__class__.NORM_RANGE, (self.__min + 1) / self.__class__.MAX * self.__class__.NORM_RANGE, step),
+                  np.arange(self.__max / self.__class__.MAX * self.__class__.NORM_RANGE, (self.__class__.MAX + 1) / self.__class__.MAX * self.__class__.NORM_RANGE, step)]
+
+
+class HRange(Range):
+    MIN = 0
+    MAX = 179
+    NORM_RANGE = np.pi
+
+
+class SRange(Range):
+    MIN = 0
+    MAX = 255
+
+
+class VRange(Range):
+    MIN = 0
+    MAX = 255
+
+
+def threshold(gray, range: Range):
+    output = np.zeros_like(gray, np.uint8)
+    if range.inside:
+        output[np.bitwise_and(range.min <= gray, gray <= range.max)] = 255
+    else:
+        output[np.bitwise_or(range.min >= gray, gray >= range.max)] = 255
+
+    return output
+
+
+def threshold_hsv(hsv, h_range: HRange, s_range: SRange, v_range: VRange):
+    output = np.zeros_like(hsv, np.uint8)
+    output[:, :, 0] = threshold(hsv[:, :, 0], h_range)
+    output[:, :, 1] = threshold(hsv[:, :, 1], s_range)
+    output[:, :, 2] = threshold(hsv[:, :, 2], v_range)
+
+    return np.amin(output, axis=-1)
+
+
+def get_arc_regions(h_range: HRange, s_range: SRange):
+    if h_range.inside and s_range.inside:
+        return [
+            Rectangle(
+                h_range.min / 180 * np.pi, s_range.min / 256,
+                (h_range.max + 1) / 180 * np.pi, (s_range.max + 1) / 256,
+                dtype=float
+            )
+        ]
+    elif h_range.inside and not s_range.inside:
+        return [
+            Rectangle(
+                h_range.min / 180 * np.pi, 0,
+                (h_range.max + 1) / 180 * np.pi, (s_range.min + 1) / 256,
+                dtype=float
+            ),
+            Rectangle(
+                h_range.min / 180 * np.pi, s_range.max / 256,
+                (h_range.max + 1) / 180 * np.pi, 1,
+                dtype=float
+            )
+        ]
+    elif not h_range.inside and s_range.inside:
+        return [
+            Rectangle(
+                0, s_range.min / 256,
+                   (h_range.min + 1) / 180 * np.pi, (s_range.max + 1) / 256,
+                dtype=float
+            ),
+            Rectangle(
+                h_range.max / 180 * np.pi, s_range.min / 256,
+                np.pi, (s_range.max + 1) / 256,
+                dtype=float
+            )
+        ]
+    else:
+        return [
+            Rectangle(
+                0, 0,
+                (h_range.min + 1) / 180 * np.pi, (s_range.min + 1) / 256,
+                dtype=float
+            ),
+            Rectangle(
+                h_range.max / 180 * np.pi, 0,
+                np.pi, (s_range.min + 1) / 256,
+                dtype=float
+            ),
+            Rectangle(
+                0, s_range.max / 256,
+                (h_range.min + 1) / 180 * np.pi, 1,
+                dtype=float
+            ),
+            Rectangle(
+                h_range.max / 180 * np.pi, s_range.max / 256,
+                np.pi, 1,
+                dtype=float
+            ),
+        ]
 
 
 def fill_holes(mask):

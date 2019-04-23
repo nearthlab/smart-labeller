@@ -196,19 +196,20 @@ class Rectangle:
         return Rectangle(self.__data, dtype=dtype)
 
     def is_empty(self):
-        return (self.top > self.bottom or self.left > self.right)
+        return (self.top > self.bottom or self.left > self.right) if self.dtype == int \
+            else (self.top >= self.bottom or self.left >= self.right)
 
     def width(self):
         if self.is_empty():
             return 0
         else:
-            return self.right - self.left + 1
+            return self.right - self.left + 1 if self.dtype == int else self.right - self.left
 
     def height(self):
         if self.is_empty():
             return 0
         else:
-            return self.bottom - self.top + 1
+            return self.bottom - self.top + 1 if self.dtype == int else self.bottom - self.top
 
     def area(self):
         return self.width() * self.height()
