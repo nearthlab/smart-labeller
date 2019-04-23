@@ -30,6 +30,19 @@ class ViewMode(enum.Enum):
         return self.__add__(-other)
 
 
+class HSPlotMode(enum.Enum):
+    ALL = 0
+    IMAGE = 1
+    FOREGROUND = 2
+    BACKGROUND = 3
+
+    def __add__(self, other: int):
+        return HSPlotMode((self.value + other) % len(HSPlotMode))
+
+    def __sub__(self, other: int):
+        return self.__add__(-other)
+
+
 class BrushType(enum.Enum):
     # val = pixel value for grabcut mask
     # color = BGR pixel value for visualization
@@ -222,10 +235,12 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             self.slider_axes.append(upper_slider_ax)
 
         self.hs_panel = self.fig.add_axes((0.008, 0.005, 0.15, 0.15), projection='polar', facecolor='lightgoldenrodyellow')
+        self.hs_plot_mode = HSPlotMode.ALL
         self.arc_regions = []
         hide_axes_labels(self.hs_panel)
 
-        self.mark_hs_range()
+        self.plot_hs_range()
+        self.plot_thresh_regions()
         self.display()
 
     def mainloop(self):
@@ -383,36 +398,62 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         self.arc_regions.clear()
         self.refresh()
 
-    def mark_hs_range(self):
+    def plot_hs_range(self):
         self.hs_panel.clear()
-        # visualize hsv pallete
-        h_range = self.h_range
-        s_range = self.s_range
+        if self.hs_plot_mode == HSPlotMode.ALL:
+            self.hs_panel.set_title('HSV Disc')
+            # visualize hsv pallete
+            h_range = HRange()
+            s_range = SRange()
 
-        r_vals = s_range.get_ranges(1 / 32)
-        theta_vals = h_range.get_ranges(np.pi / 60)
+            r_val = s_range.get_ranges(1/32)[0]
+            theta_val = h_range.get_ranges(np.pi/60)[0]
 
-        for r_val in r_vals:
-            for theta_val in theta_vals:
-                r = np.tile(r_val, len(theta_val))
-                theta = np.repeat(theta_val, len(r_val))
-                self.hs_panel.scatter(
-                    theta, r,
-                    c=colors.hsv_to_rgb(np.clip(np.transpose([theta / np.pi, r, np.ones_like(theta)]), 0, 1)),
-                    s=30 * r,
-                    alpha=0.8
-                )
+            r = np.tile(r_val, len(theta_val))
+            theta = np.repeat(theta_val, len(r_val))
+            self.hs_panel.scatter(
+                theta, r,
+                c=colors.hsv_to_rgb(np.clip(np.transpose([theta / np.pi, r, np.ones_like(theta)]), 0, 1)),
+                s=30 * r,
+                alpha=0.8
+            )
+        else:
+            if self.hs_plot_mode == HSPlotMode.IMAGE:
+                img = np.copy(self.src_hsv)
+                self.hs_panel.set_title('Image HSV\nDistribution')
+            elif self.hs_plot_mode == HSPlotMode.BACKGROUND:
+                img = cv2.bitwise_and(self.src_hsv, self.src_hsv, mask=np.where(self.mask % 2 == 0, 255, 0).astype(np.uint8))
+                self.hs_panel.set_title('Background HSV\nDistribution')
+            else:
+                img = cv2.bitwise_and(self.src_hsv, self.src_hsv, mask=np.where(self.mask % 2 == 1, 255, 0).astype(np.uint8))
+                self.hs_panel.set_title('Foreground HSV\nDistribution')
+            hsv_pixels = np.reshape(img, (img.shape[0] * img.shape[1], img.shape[2]))
+            hsv_pixels = np.unique(hsv_pixels, axis=0)
+            hsv_pixels = (np.round(hsv_pixels / [3, 8, 1]) * np.array([3, 8, 1])).astype(np.int)
+            hsv_pixels = np.unique(hsv_pixels, axis=0)
 
-        self.hs_panel.set_rmax(1)
+            theta = hsv_pixels[:,0]/179*np.pi
+            r = hsv_pixels[:,1]/255
+            v = hsv_pixels[:,2]/255
+            self.hs_panel.scatter(
+                theta, r,
+                c=colors.hsv_to_rgb(np.clip(np.transpose([theta / np.pi, r, v]), 0, 1)),
+                s=30 * r,
+                alpha=0.8
+            )
+
+        self.hs_panel.set_rmax(1.2)
         self.hs_panel.set_thetamax(180)
 
+    def plot_thresh_regions(self):
         self.clear_arc_regions()
         arc_regions = get_arc_regions(self.h_range, self.s_range)
         for region in arc_regions:
             self.add_arc_region(region)
 
-        self.hs_panel.set_rmax(1)
+        self.hs_panel.set_rmax(1.2)
         self.hs_panel.set_thetamax(180)
+
 
     def on_key_press(self, event):
         super().on_key_press(event)
@@ -442,14 +483,23 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
                     self.set_sliders(*data)
                     self.current_lower_thresh = self.lower_thresh.copy()
                     self.current_upper_thresh = self.upper_thresh.copy()
+                    self.plot_thresh_regions()
                 elif action_name == 'lc':
                     idx = 0 if self.lc_switch.value_selected == 'off' else 1
                     self.lc_switch.set_active(1 - idx)
+                    self.history_mgr.pop()
                 self.update_mask()
-                self.mark_hs_range()
                 self.display()
             else:
                 self.show_message('No history to recover', 'Guide')
+        elif event.key == 'q':
+            self.hs_plot_mode -= 1
+            self.plot_hs_range()
+            self.plot_thresh_regions()
+        elif event.key == 'e':
+            self.hs_plot_mode += 1
+            self.plot_hs_range()
+            self.plot_thresh_regions()
 
     def on_mouse_press(self, event):
         super().on_mouse_press(event)
@@ -487,12 +537,12 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
                 trace = self.brush_iptr.get_trace(p)
                 self.add_patch(trace.patch())
         elif self.on_slider_adjust:
-            self.mark_hs_range()
+            self.plot_thresh_regions()
 
     def on_mouse_release(self, event):
         super().on_mouse_release(event)
         p = self.get_image_coordinates(event)
-        if self.brush_iptr.on_dragging:
+        if self.brush_iptr.on_dragging and event.button == 3:
             if p is not None:
                 self.brush_iptr.get_trace(p)
                 self.history_mgr.add_brush_touch_history(self.brush_iptr.history())
@@ -502,12 +552,12 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             self.brush_iptr.finish_dragging(p)
             self.update_mask()
             self.display()
-        elif self.on_slider_adjust:
+        elif self.on_slider_adjust and event.button == 1:
             self.on_slider_adjust = False
             self.current_lower_thresh = self.lower_thresh.copy()
             self.current_upper_thresh = self.upper_thresh.copy()
             self.update_mask()
-            self.mark_hs_range()
+            self.plot_thresh_regions()
             self.display()
 
     def on_scroll(self, event):
