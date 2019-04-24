@@ -1,13 +1,14 @@
-import os
-import cv2
 import json
+import os
+
+import cv2
 import numpy as np
 
 from .drag_interpreter import DragInterpreter
-from .mask_editor import MaskEditor
 from .image_group_viewer import ImageGroupViewer
+from .mask_editor import MaskEditor
 from .partially_labelled_dataset import PartiallyLabelledDataset, ObjectAnnotation
-from .utils import random_colors, grabcut, fill_holes
+from .utils import random_colors, grabcut, fill_holes, hide_axes_labels
 
 
 class LabelHelper(ImageGroupViewer):
@@ -20,13 +21,20 @@ Ctrl + d: delete the current object
 mouse right + dragging: add a new object
     '''
 
-    def __init__(self, dataset: PartiallyLabelledDataset):
+    def __init__(self, dataset: PartiallyLabelledDataset, info=None):
         assert dataset.root is not None, 'The dataset passed to LabelHelper is not loaded properly'
         super().__init__(
             [os.path.basename(image_file) for image_file in dataset.image_files],
-            dataset.name
+            dataset.root,
+            ImageGroupViewer.DEFAULT_AXES_POSITION if info is None else (0.05, 0.125, 0.75, 0.75)
         )
         self.dataset = dataset
+        self.info = info or {}
+        if len(self.info) > 0:
+            num_items = len(list(self.info.values())[0])
+            self.info_panel = self.fig.add_axes((0.81, 0.125, 0.14, min(0.07 * num_items, 0.75)))
+            self.info_panel.set_facecolor('lightgoldenrodyellow')
+            hide_axes_labels(self.info_panel)
         self.mode = cv2.GC_INIT_WITH_RECT
         self.pallete = random_colors(100)
         self.rect_ipr = DragInterpreter()
@@ -39,12 +47,46 @@ mouse right + dragging: add a new object
 
     def display(self):
         super().display()
+        self.clear_patches()
+        filename = os.path.basename(self.dataset.image_files[self.id])
         if self.should_update():
             self.img = self.dataset.load_image(self.id)
             self.annotations = self.dataset.load_annotations(self.id)
             self.set_image(self.img)
 
-        self.clear_patches()
+            if filename in self.info:
+                self.info_panel.clear()
+
+                def resolve_lines(s, max_len):
+                    q, r = len(s).__divmod__(max_len)
+                    lines = [s[i * max_len:(i + 1) * max_len] for i in range(q)]
+                    if r > 0:
+                        lines.append(s[-r:])
+                    return '\n'.join(lines)
+
+                keys = list(sorted(self.info[filename].keys()))
+                values = [self.info[filename][key] for key in keys]
+                for i, items in enumerate(zip(keys, values)):
+                    self.info_panel.text(
+                        0.02, 0.9 - i * 0.2,
+                        resolve_lines(items[0], 14),
+                        bbox=dict(
+                            linewidth=1, alpha=0.0,
+                            edgecolor='none',
+                            facecolor='none',
+                        )
+                    )
+                    self.info_panel.text(
+                        0.48, 0.93 - i * 0.2,
+                        resolve_lines(items[1], 20),
+                        bbox=dict(
+                            linewidth=1, alpha=0.0,
+                            edgecolor='none',
+                            facecolor='none',
+                        ),
+                        verticalalignment='top'
+                    )
+
         for obj_id, annotation in enumerate(self.annotations):
             alpha = 0.7 if obj_id == self.obj_id else 0.3
             linewidth = 2 if obj_id == self.obj_id else 1
@@ -69,16 +111,14 @@ mouse right + dragging: add a new object
                 bbox=dict(facecolor=color, alpha=alpha)
             ))
 
-        title = 'FILENAME: {} | IMAGE ID: {} | OBJECT ID: {} | OBJECT CLASS: {}'.format(
-            os.path.basename(self.dataset.image_files[self.id]),
-            self.id,
-            self.obj_id,
-            self.dataset.class_id2name[self.annotations[self.obj_id].class_id]
-        ) if len(self.annotations) > 0 else 'FILENAME: {} | IMAGE ID: {} | NO OBJECT'.format(
-            os.path.basename(self.dataset.image_files[self.id]),
-            self.id
+        self.ax.set_title(
+            'FILENAME: {} | IMAGE ID: {} | OBJECT ID: {} | OBJECT CLASS: {}'.format(
+                filename, self.id, self.obj_id,
+                self.dataset.class_id2name[self.annotations[self.obj_id].class_id]
+            ) if len(self.annotations) > 0 else 'FILENAME: {} | IMAGE ID: {} | NO OBJECT'.format(
+                filename, self.id
+            )
         )
-        self.set_title(title)
 
     def on_image_menubar_select(self, event):
         super().on_image_menubar_select(event)
@@ -102,7 +142,7 @@ mouse right + dragging: add a new object
         if self.obj_id < len(self.annotations):
             self.disable_menubar()
             self.iconify()
-            mask_touch_helper = MaskEditor(self.img, self.annotations[self.obj_id].mask(self.img.shape[:2]))
+            mask_touch_helper = MaskEditor(self.img, self.annotations[self.obj_id].mask(self.img.shape[:2]), win_title=os.path.basename(self.dataset.image_files[self.id]))
             mask = mask_touch_helper.mainloop()
             self.deiconify()
             self.enable_menubar()
@@ -157,14 +197,14 @@ mouse right + dragging: add a new object
 
     def on_mouse_press(self, event):
         super().on_mouse_press(event)
-        p = self.get_image_coordinates(event)
+        p = self.get_axes_coordinates(event)
         if event.key is None and event.button == 3:
             self.rect_ipr.start_dragging(p)
 
     def on_mouse_move(self, event):
         super().on_mouse_move(event)
         if self.rect_ipr.on_dragging:
-            p = self.get_image_coordinates(event)
+            p = self.get_axes_coordinates(event)
             self.rect_ipr.update(p)
             self.add_transient_patch(self.rect_ipr.rect.to_patch(
                 linewidth=1,
@@ -175,7 +215,7 @@ mouse right + dragging: add a new object
 
     def on_mouse_release(self, event):
         super().on_mouse_release(event)
-        p = self.get_image_coordinates(event)
+        p = self.get_axes_coordinates(event)
         if self.rect_ipr.on_dragging:
             self.rect_ipr.finish_dragging(p)
             class_id = self.ask_class_id()

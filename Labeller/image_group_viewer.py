@@ -14,8 +14,8 @@ a or left arrow: go to the previous image
 d or right arrow: go to the next image
     '''
 
-    def __init__(self, items: list, win_title=None):
-        super(ImageGroupViewer, self).__init__(win_title)
+    def __init__(self, items: list, win_title=None, axes_pos=ImageWindow.DEFAULT_AXES_POSITION):
+        super().__init__(win_title, axes_pos)
         self.items = items
         self.id = 0
         self.prev_id = None
@@ -63,11 +63,11 @@ d or right arrow: go to the next image
                 self.force_focus()
 
     def mainloop(self):
-        super(ImageGroupViewer, self).mainloop()
+        super().mainloop()
         self.image_menubar.mainloop()
 
     def close(self):
-        super(ImageGroupViewer, self).close()
+        super().close()
         self.image_menubar.close()
 
     @abstractmethod
@@ -84,7 +84,7 @@ d or right arrow: go to the next image
             raise Exception('No images to display')
 
     def on_key_press(self, event):
-        super(ImageGroupViewer, self).on_key_press(event)
+        super().on_key_press(event)
         if event.key in ['left', 'a']:
             self.id = (self.id - 1) % self.num_items
         elif event.key in ['right', 'd']:

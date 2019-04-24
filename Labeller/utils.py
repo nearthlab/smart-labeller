@@ -103,22 +103,34 @@ class Range:
     def inside(self):
         return self.__inside
 
+    def __contains__(self, item):
+        if self.__inside:
+            return item in range(self.__min, self.__max + 1)
+        else:
+            return item in range(self.__min + 1) or item in range(self.__max, self.__class__.MAX + 1)
+
     def __repr__(self):
         if self.__inside:
             return '[{}, {}]'.format(self.__min, self.__max)
         else:
-            return '[{}, {}] U [{}, {}]'.format(self.__class__.MIN, self.__min, self.__max, self.__class__.MAX + 1)
+            return '[{}, {}] U [{}, {}]'.format(self.__class__.MIN, self.__min, self.__max, self.__class__.MAX)
 
     def get_ranges(self, step):
         return [np.arange(self.__min / self.__class__.MAX * self.__class__.NORM_RANGE, (self.__max + 1) / self.__class__.MAX * self.__class__.NORM_RANGE, step)] if self.__inside \
             else [np.arange(self.__class__.MIN / self.__class__.MAX * self.__class__.NORM_RANGE, (self.__min + 1) / self.__class__.MAX * self.__class__.NORM_RANGE, step),
                   np.arange(self.__max / self.__class__.MAX * self.__class__.NORM_RANGE, (self.__class__.MAX + 1) / self.__class__.MAX * self.__class__.NORM_RANGE, step)]
 
+    def __truediv__(self, other):
+        if self.__inside:
+            return self.__class__(self.__min // other, self.__max // other)
+        else:
+            return self.__class__(self.__max // other, self.__min // other)
+
 
 class HRange(Range):
     MIN = 0
-    MAX = 179
-    NORM_RANGE = np.pi
+    MAX = 359
+    NORM_RANGE = 2 * np.pi
 
 
 class SRange(Range):
@@ -143,7 +155,7 @@ def threshold(gray, range: Range):
 
 def threshold_hsv(hsv, h_range: HRange, s_range: SRange, v_range: VRange):
     output = np.zeros_like(hsv, np.uint8)
-    output[:, :, 0] = threshold(hsv[:, :, 0], h_range)
+    output[:, :, 0] = threshold(hsv[:, :, 0], h_range / 2)
     output[:, :, 1] = threshold(hsv[:, :, 1], s_range)
     output[:, :, 2] = threshold(hsv[:, :, 2], v_range)
 
@@ -151,63 +163,25 @@ def threshold_hsv(hsv, h_range: HRange, s_range: SRange, v_range: VRange):
 
 
 def get_arc_regions(h_range: HRange, s_range: SRange):
-    if h_range.inside and s_range.inside:
-        return [
-            Rectangle(
-                h_range.min / 180 * np.pi, s_range.min / 256,
-                (h_range.max + 1) / 180 * np.pi, (s_range.max + 1) / 256,
-                dtype=float
-            )
-        ]
-    elif h_range.inside and not s_range.inside:
-        return [
-            Rectangle(
-                h_range.min / 180 * np.pi, 0,
-                (h_range.max + 1) / 180 * np.pi, (s_range.min + 1) / 256,
-                dtype=float
-            ),
-            Rectangle(
-                h_range.min / 180 * np.pi, s_range.max / 256,
-                (h_range.max + 1) / 180 * np.pi, 1,
-                dtype=float
-            )
-        ]
-    elif not h_range.inside and s_range.inside:
-        return [
-            Rectangle(
-                0, s_range.min / 256,
-                   (h_range.min + 1) / 180 * np.pi, (s_range.max + 1) / 256,
-                dtype=float
-            ),
-            Rectangle(
-                h_range.max / 180 * np.pi, s_range.min / 256,
-                np.pi, (s_range.max + 1) / 256,
-                dtype=float
-            )
-        ]
-    else:
-        return [
-            Rectangle(
-                0, 0,
-                (h_range.min + 1) / 180 * np.pi, (s_range.min + 1) / 256,
-                dtype=float
-            ),
-            Rectangle(
-                h_range.max / 180 * np.pi, 0,
-                np.pi, (s_range.min + 1) / 256,
-                dtype=float
-            ),
-            Rectangle(
-                0, s_range.max / 256,
-                (h_range.min + 1) / 180 * np.pi, 1,
-                dtype=float
-            ),
-            Rectangle(
-                h_range.max / 180 * np.pi, s_range.max / 256,
-                np.pi, 1,
-                dtype=float
-            ),
-        ]
+    hmin, hmax = (h_range.min, h_range.max) if h_range.inside else (h_range.max - HRange.MAX, h_range.min)
+    return [
+        Rectangle(
+            hmin / 180 * np.pi, s_range.min / 256,
+            (hmax + 1) / 180 * np.pi, (s_range.max + 1) / 256,
+            dtype=float
+        )
+    ] if s_range.inside else [
+        Rectangle(
+            hmin / 180 * np.pi, 0,
+            (hmax + 1) / 180 * np.pi, (s_range.min + 1) / 256,
+            dtype=float
+        ),
+        Rectangle(
+            hmin / 180 * np.pi, s_range.max / 256,
+            (hmax + 1) / 180 * np.pi, 1,
+            dtype=float
+        )
+    ]
 
 
 def fill_holes(mask):

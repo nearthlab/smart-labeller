@@ -332,7 +332,7 @@ class Polygon(geom.Polygon):
         return np.array(list(zip(x.tolist(), y.tolist())))
 
     def simplify(self, tolerance, preserve_topology=True):
-        return Polygon(super(Polygon, self).simplify(tolerance, preserve_topology))
+        return Polygon(super().simplify(tolerance, preserve_topology))
 
     def to_patch(self, shape, *args, **kwargs):
         return patches.Polygon(self.to_ndarray(), shape, *args, **kwargs)

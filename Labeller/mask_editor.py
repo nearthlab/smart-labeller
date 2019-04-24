@@ -1,20 +1,20 @@
-import enum
-import cv2
 import copy
-import numpy as np
-import matplotlib.patches as patches
-import matplotlib.colors as colors
-
+import enum
 from functools import partial
+
+import cv2
+import matplotlib.colors as colors
+import numpy as np
 from matplotlib.widgets import Slider, RadioButtons
 
+from .brush import BrushType, BrushInterpreter, BrushTouch, apply_brush_touch
+from .drag_interpreter import PolarDragInterpreter
+from .geometry import Point
 from .image_window import ImageWindow
-from .geometry import Point, Rectangle
 from .utils import (hide_axes_labels, preprocess_mask,
                     grabcut, overlay_mask, threshold_hsv,
                     HRange, SRange, VRange, get_arc_regions,
                     fill_holes, largest_connected_component)
-from .drag_interpreter import DragInterpreterBase
 
 
 class ViewMode(enum.Enum):
@@ -43,89 +43,18 @@ class HSPlotMode(enum.Enum):
         return self.__add__(-other)
 
 
-class BrushType(enum.Enum):
-    # val = pixel value for grabcut mask
-    # color = BGR pixel value for visualization
-    BG = {'val': 0, 'color': (0, 0, 0)}
-    FG = {'val': 1, 'color': (0, 255, 0)}
-    PR_BG = {'val': 2, 'color': (51, 51, 153)}
-    PR_FG = {'val': 3, 'color': (51, 255, 204)}
-
-    @classmethod
-    def val2color(cls, val):
-        return {
-            brush_type.value['val']: np.array(brush_type.value['color'])
-            for brush_type in cls.__members__.values()
-        }[val]
-
-    @classmethod
-    def val2name(cls, val):
-        return {
-            brush_type.value['val']: brush_type.name
-            for brush_type in cls.__members__.values()
-        }[val]
-
-    def __add__(self, other: int):
-        val = (self.value['val'] + other) % len(BrushType)
-        return {
-            brush_type.value['val']: brush_type
-            for brush_type in BrushType.__members__.values()
-        }[val]
-
-    def __sub__(self, other: int):
-        return self.__add__(-other)
-
-
-class BrushInterpreter(DragInterpreterBase):
-    def __init__(self):
-        super(BrushInterpreter, self).__init__()
-        self.radius = 30
-        self.brush = BrushType.BG
-        self.brush_trace = []
-
-    def get_trace(self, p):
-        trace = BrushTouch(p, self.radius, True, self.brush)
-        self.brush_trace.append(trace)
-        return trace
-
-    def history(self):
-        return copy.deepcopy(self.brush_trace)
-
-    def clear(self):
-        self.brush_trace.clear()
-
-
-class BrushTouch:
-    def __init__(self, center: Point, radius: int, solid: bool, brush: BrushType):
-        self.center = center
-        self.radius = radius
-        self.solid = solid
-        self.brush = brush
-
-    def patch(self, alpha=1.0):
-        color = [val / 255 for val in self.brush.value['color']]
-        color.append(alpha)
-        color = tuple(color)
-        return patches.Circle(
-            tuple(self.center), self.radius,
-            edgecolor=color if alpha == 1.0 else 'k',
-            facecolor=color if self.solid else 'none',
-            linewidth=2
-        )
-
-
-def apply_brush_touch(img: np.ndarray, brush_touch: BrushTouch):
-    key = 'val' if img.ndim == 2 else 'color'
-    return cv2.circle(img, tuple(brush_touch.center), brush_touch.radius, brush_touch.brush.value[key], -1 if brush_touch.solid else 1)
-
-
 class MaskEditHistoryManager:
 
     def __init__(self):
+        self.last_lower_thresh = np.array([0, 0, 0])
+        self.last_upper_thresh = np.array([359, 255, 255])
         self.__action_history = []
 
     def __len__(self):
         return len(self.__action_history)
+
+    def __repr__(self):
+        return '{} / {} / {}'.format(self.__action_history, self.last_lower_thresh, self.last_upper_thresh)
 
     def add_brush_touch_history(self, brush_trace):
         self.__action_history.append(('brush', copy.deepcopy(brush_trace)))
@@ -134,7 +63,9 @@ class MaskEditHistoryManager:
         self.__action_history.append(('grabcut', np.copy(mask)))
 
     def add_thresh_history(self, lower_thresh, upper_thresh):
-        self.__action_history.append(('thresh', (lower_thresh, upper_thresh)))
+        self.__action_history.append(('thresh', (self.last_lower_thresh, self.last_upper_thresh)))
+        self.last_lower_thresh = lower_thresh.copy()
+        self.last_upper_thresh = upper_thresh.copy()
 
     def add_switch_history(self, name):
         self.__action_history.append((name, None))
@@ -143,7 +74,11 @@ class MaskEditHistoryManager:
         if self.__len__() == 0:
             raise Exception('No history to pop')
         else:
-            return self.__action_history.pop(-1)
+            item = self.__action_history.pop(-1)
+            if item[0] == 'thresh':
+                self.last_lower_thresh = item[1][0].copy()
+                self.last_upper_thresh = item[1][1].copy()
+            return item
 
     def brush_traces(self):
         return [h[1] for h in self.__action_history if h[0] == 'brush']
@@ -170,6 +105,8 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
 
     def __init__(self, img: np.ndarray, mask: np.ndarray, win_title=None):
         super().__init__(win_title, (0.05, 0.18, 0.9, 0.7))
+        self.disable_callbacks()
+
         self.src = np.copy(img)
         self.src_hsv = cv2.cvtColor(self.src, cv2.COLOR_RGB2HSV)
         self.mask_src = preprocess_mask(mask)
@@ -214,30 +151,32 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         self.upper_names = ['Upper H', 'Upper S', 'Upper V']
         self.lower_names = ['Lower H', 'Lower S', 'Lower V']
         self.min_values = np.array([0, 0, 0])
-        self.max_values = np.array([179, 255, 255])
-        self.current_lower_thresh = self.min_values.copy()
-        self.current_upper_thresh = self.max_values.copy()
+        self.max_values = np.array([359, 255, 255])
         self.sliders = {}
         self.slider_axes = []
         self.on_slider_adjust = False
         axcolor = 'lightgoldenrodyellow'
         for i in range(3):
-            lower_slider_ax = self.fig.add_axes((0.25, 0.1 - (2 * i) * 0.015 - i * 0.005, 0.7, 0.01), facecolor=axcolor)
-            self.sliders[self.lower_names[i]] = Slider(lower_slider_ax, self.lower_names[i], self.min_values[i], self.max_values[i], valinit=self.min_values[i])
+            lower_slider_ax = self.fig.add_axes((0.25, 0.12 - (2 * i) * 0.018 - i * 0.008, 0.7, 0.01), facecolor=axcolor)
+            self.sliders[self.lower_names[i]] = Slider(lower_slider_ax, self.lower_names[i], self.min_values[i], self.max_values[i], valinit=self.min_values[i], color=(0, 1, 0, 0.3))
             self.sliders[self.lower_names[i]].valtext.set_text(str(int(self.min_values[i])))
-            self.sliders[self.lower_names[i]].on_changed(partial(self.slider_callback, i, 'lower'))
             self.slider_axes.append(lower_slider_ax)
 
-            upper_slider_ax = self.fig.add_axes((0.25, 0.1 - (2 * i + 1) * 0.015 - i * 0.005, 0.7, 0.01), facecolor=axcolor)
-            self.sliders[self.upper_names[i]] = Slider(upper_slider_ax, self.upper_names[i], self.min_values[i], self.max_values[i], valinit=self.max_values[i])
+            upper_slider_ax = self.fig.add_axes((0.25, 0.12 - (2 * i + 1) * 0.018 - i * 0.008, 0.7, 0.01), facecolor=axcolor)
+            self.sliders[self.upper_names[i]] = Slider(upper_slider_ax, self.upper_names[i], self.min_values[i], self.max_values[i], valinit=self.max_values[i], color=(0, 1, 0, 0.3))
             self.sliders[self.upper_names[i]].valtext.set_text(str(int(self.max_values[i])))
-            self.sliders[self.upper_names[i]].on_changed(partial(self.slider_callback, i, 'upper'))
             self.slider_axes.append(upper_slider_ax)
+        self.enable_callbacks()
 
-        self.hs_panel = self.fig.add_axes((0.008, 0.005, 0.15, 0.15), projection='polar', facecolor='lightgoldenrodyellow')
+        self.hs_panel = self.fig.add_axes((0.008, 0.01, 0.15, 0.15), projection='polar', facecolor='lightgoldenrodyellow')
         self.hs_plot_mode = HSPlotMode.ALL
+        self.hs_region_iptr = PolarDragInterpreter()
         self.arc_regions = []
+        self.temp_arc_regions = []
         hide_axes_labels(self.hs_panel)
+
+        self.v_panel = self.fig.add_axes((0.16, 0.01, 0.02, 0.15), facecolor='lightgoldenrodyellow')
+        hide_axes_labels(self.v_panel, 'x')
 
         self.plot_hs_range()
         self.plot_thresh_regions()
@@ -246,6 +185,22 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
     def mainloop(self):
         super().mainloop()
         return self.mask if self.save_result else None
+
+    def enable_callbacks(self):
+        super().enable_callbacks()
+        if hasattr(self, 'sliders'):
+            for i in range(3):
+                self.sliders[self.lower_names[i]].set_active(True)
+                self.cids.append(self.sliders[self.lower_names[i]].on_changed(partial(self.slider_callback, i, 'lower')))
+                self.sliders[self.upper_names[i]].set_active(True)
+                self.cids.append(self.sliders[self.upper_names[i]].on_changed(partial(self.slider_callback, i, 'upper')))
+
+    def disable_callbacks(self):
+        super().disable_callbacks()
+        if hasattr(self, 'sliders'):
+            for i in range(3):
+                self.sliders[self.lower_names[i]].set_active(False)
+                self.sliders[self.upper_names[i]].set_active(False)
 
     def run_grabcut(self):
         gc_mask = grabcut(self.src, cv2.GC_INIT_WITH_MASK, mask=self.mask)
@@ -285,19 +240,27 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
 
         self.mask = self.mask_src * thresh_mask
 
-        if self.largest_component_only:
-            lc_mask = largest_connected_component(
-                np.where(self.mask % 2 == 1, 255, 0).astype(np.uint8)
-            ) // 255
-            self.mask *= lc_mask.astype(np.uint8)
-
         for brush_trace in self.history_mgr.brush_traces():
             for brush_touch in brush_trace:
                 self.mask = apply_brush_touch(self.mask, brush_touch)
 
+        if self.largest_component_only:
+            lc_mask = largest_connected_component(
+                np.where(self.mask % 2 == 1, 255, 0).astype(np.uint8)
+            ) // 255
+            #                   lc_mask|   0   1
+            #         self.mask        |
+            # --------------------------|--------
+            #           0(BG)          |   0   0
+            #           1(FG)          |   0   1
+            #           2(PBG)         |   2   2
+            #           3(PFG)         |   2   3
+            q, r = self.mask.__divmod__(2)
+            self.mask = 2 * q + lc_mask * r
+
         # Most of the semantic/instance segmentation datasets require
         # object masks to be simply connected (i.e. contains no holes)
-        # So fill the holes final (probably) foreground mask
+        # So fill the holes in final (probably) foreground mask
         fg = np.where(self.mask == 1, 255, 0).astype(np.uint8)
         pfg = np.where(self.mask == 3, 255, 0).astype(np.uint8)
         filled_fg = fill_holes(fg)
@@ -345,10 +308,12 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         elif isinstance(val, int):
             self.sliders[name].valtext.set_text(val)
 
-    def set_sliders(self, lower_thresh, upper_thresh):
+    def set_sliders(self, lower_thresh, upper_thresh, write_history=True):
         for i, vals in enumerate(zip(lower_thresh, upper_thresh)):
             self.sliders[self.lower_names[i]].set_val(vals[0])
             self.sliders[self.upper_names[i]].set_val(vals[1])
+        if write_history:
+            self.history_mgr.add_thresh_history(self.lower_thresh, self.upper_thresh)
         self.update_mask()
         self.refresh()
 
@@ -358,37 +323,53 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             for val in range(4):
                 rgb_mask[self.mask == val] = BrushType.val2color(val)
             self.set_image(rgb_mask)
-            self.set_title('Object Mask')
+            self.ax.set_title('Object Mask')
         elif self.viewmode == ViewMode.MASKED_IMAGE:
             self.set_image(cv2.bitwise_and(self.src, self.src, mask=np.where(self.mask % 2 == 1, 255, 0).astype(np.uint8)))
-            self.set_title('Foreground')
+            self.ax.set_title('Foreground')
         elif self.viewmode == ViewMode.INVERSE_MASKED_IMAGE:
             self.set_image(cv2.bitwise_and(self.src, self.src, mask=np.where(self.mask % 2 == 0, 255, 0).astype(np.uint8)))
-            self.set_title('Background')
+            self.ax.set_title('Background')
         elif self.viewmode == ViewMode.MASK_OVERLAY:
             overlayed = np.copy(self.src)
             for i in range(len(BrushType)):
                 overlay_mask(overlayed, np.where(self.mask == i, 255, 0).astype(np.uint8), BrushType.val2color(i) / 255)
             self.set_image(overlayed)
-            self.set_title('Mask Overlayed Image')
+            self.ax.set_title('Mask Overlayed Image')
         else:
             raise ValueError('Invalid viewmode: {}'.format(self.viewmode))
 
-    def add_arc_region(self, rect):
+    def add_arc_region(self, rect, temporary=False):
         if not rect.is_empty():
             theta = np.arange(rect.left, rect.right, np.pi / 180)
             r_bottom = rect.bottom * np.ones_like(theta)
             r_top = rect.top * np.ones_like(theta)
 
-            self.arc_regions += self.hs_panel.plot(
-                [rect.left, rect.left], [rect.bottom, rect.top], color='k', linestyle='--'
-            )
-            self.arc_regions += self.hs_panel.plot(
-                [rect.right, rect.right], [rect.bottom, rect.top], color='k', linestyle='--'
-            )
-            self.arc_regions += self.hs_panel.plot(theta, r_top, color='k', linestyle='--')
-            self.arc_regions += self.hs_panel.plot(theta, r_bottom, color='k', linestyle='--')
+            whole_theta_range = (rect.right - rect.left) % (2 * np.pi) == 0
 
+            if temporary:
+                if not whole_theta_range:
+                    self.temp_arc_regions += self.hs_panel.plot(
+                        [rect.left, rect.left], [rect.bottom, rect.top], color='k', linestyle='--'
+                    )
+                    self.temp_arc_regions += self.hs_panel.plot(
+                        [rect.right, rect.right], [rect.bottom, rect.top], color='k', linestyle='--'
+                    )
+
+                self.temp_arc_regions += self.hs_panel.plot(theta, r_top, color='k', linestyle='--')
+                self.temp_arc_regions += self.hs_panel.plot(theta, r_bottom, color='k', linestyle='--')
+            else:
+                if not whole_theta_range:
+                    self.arc_regions += self.hs_panel.plot(
+                        [rect.left, rect.left], [rect.bottom, rect.top], color='k', linestyle='-'
+                    )
+                    self.arc_regions += self.hs_panel.plot(
+                        [rect.right, rect.right], [rect.bottom, rect.top], color='k', linestyle='-'
+                    )
+                self.arc_regions += self.hs_panel.plot(theta, r_top, color='k', linestyle='-')
+                self.arc_regions += self.hs_panel.plot(theta, r_bottom, color='k', linestyle='-')
+
+            self.hs_panel.set_rmax(1.2)
             self.refresh()
 
     def clear_arc_regions(self):
@@ -398,16 +379,23 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         self.arc_regions.clear()
         self.refresh()
 
+    def clear_temp_arc_regions(self):
+        for i in range(len(self.temp_arc_regions)):
+            self.temp_arc_regions[i].remove()
+
+        self.temp_arc_regions.clear()
+        self.refresh()
+
     def plot_hs_range(self):
         self.hs_panel.clear()
         if self.hs_plot_mode == HSPlotMode.ALL:
-            self.hs_panel.set_title('HSV Disc')
+            self.hs_panel.set_title('Hue-Saturation\n        Disc', loc='left')
             # visualize hsv pallete
             h_range = HRange()
             s_range = SRange()
 
-            r_val = s_range.get_ranges(1/32)[0]
-            theta_val = h_range.get_ranges(np.pi/60)[0]
+            r_val = s_range.get_ranges(1 / 32)[0]
+            theta_val = h_range.get_ranges(np.pi / 60)[0]
 
             r = np.tile(r_val, len(theta_val))
             theta = np.repeat(theta_val, len(r_val))
@@ -420,21 +408,21 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         else:
             if self.hs_plot_mode == HSPlotMode.IMAGE:
                 img = np.copy(self.src_hsv)
-                self.hs_panel.set_title('Image HSV\nDistribution')
+                self.hs_panel.set_title('Image HSV\nDistribution', loc='left')
             elif self.hs_plot_mode == HSPlotMode.BACKGROUND:
                 img = cv2.bitwise_and(self.src_hsv, self.src_hsv, mask=np.where(self.mask % 2 == 0, 255, 0).astype(np.uint8))
-                self.hs_panel.set_title('Background HSV\nDistribution')
+                self.hs_panel.set_title('Background HSV\nDistribution', loc='left')
             else:
                 img = cv2.bitwise_and(self.src_hsv, self.src_hsv, mask=np.where(self.mask % 2 == 1, 255, 0).astype(np.uint8))
-                self.hs_panel.set_title('Foreground HSV\nDistribution')
+                self.hs_panel.set_title('Foreground HSV\nDistribution', loc='left')
             hsv_pixels = np.reshape(img, (img.shape[0] * img.shape[1], img.shape[2]))
             hsv_pixels = np.unique(hsv_pixels, axis=0)
             hsv_pixels = (np.round(hsv_pixels / [3, 8, 1]) * np.array([3, 8, 1])).astype(np.int)
             hsv_pixels = np.unique(hsv_pixels, axis=0)
 
-            theta = hsv_pixels[:,0]/179*np.pi
-            r = hsv_pixels[:,1]/255
-            v = hsv_pixels[:,2]/255
+            theta = hsv_pixels[:, 0] / 179 * np.pi
+            r = hsv_pixels[:, 1] / 255
+            v = hsv_pixels[:, 2] / 255
             self.hs_panel.scatter(
                 theta, r,
                 c=colors.hsv_to_rgb(np.clip(np.transpose([theta / np.pi, r, v]), 0, 1)),
@@ -443,17 +431,17 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             )
 
         self.hs_panel.set_rmax(1.2)
-        self.hs_panel.set_thetamax(180)
 
     def plot_thresh_regions(self):
         self.clear_arc_regions()
-        arc_regions = get_arc_regions(self.h_range, self.s_range)
-        for region in arc_regions:
+        for region in get_arc_regions(self.h_range, self.s_range):
             self.add_arc_region(region)
-
         self.hs_panel.set_rmax(1.2)
-        self.hs_panel.set_thetamax(180)
 
+        self.v_panel.clear()
+        rgb = cv2.cvtColor(np.array([[[0, 0, v]] * 10 for v in range(VRange.MAX + 1)]).astype(np.uint8), cv2.COLOR_HSV2RGB)
+        alpha = np.array([[[255 if v in self.v_range else 0]] * 10 for v in range(VRange.MAX + 1)]).astype(np.uint8)
+        self.v_panel.imshow(np.dstack((rgb, alpha)) / 255)
 
     def on_key_press(self, event):
         super().on_key_press(event)
@@ -480,9 +468,7 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
                 if action_name == 'grabcut':
                     self.mask_src = data
                 elif action_name == 'thresh':
-                    self.set_sliders(*data)
-                    self.current_lower_thresh = self.lower_thresh.copy()
-                    self.current_upper_thresh = self.upper_thresh.copy()
+                    self.set_sliders(*data, False)
                     self.plot_thresh_regions()
                 elif action_name == 'lc':
                     idx = 0 if self.lc_switch.value_selected == 'off' else 1
@@ -503,18 +489,33 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
 
     def on_mouse_press(self, event):
         super().on_mouse_press(event)
-        p = self.get_image_coordinates(event)
-        if event.key is None and event.button == 3:
+
+        p = self.get_axes_coordinates(event)
+        if event.key is None and event.button == 3 and event.inaxes == self.ax:
             self.brush_iptr.start_dragging(p)
         elif event.button == 1 and event.inaxes in self.slider_axes:
             self.clear_arc_regions()
             self.on_slider_adjust = True
-            self.history_mgr.add_thresh_history(self.current_lower_thresh.copy(), self.current_upper_thresh.copy())
+        elif event.key in [None, 'shift', 'control', 'ctrl+shift'] and event.inaxes == self.hs_panel:
+            if event.dblclick and event.button == 1:
+                if not np.array_equal(self.history_mgr.last_lower_thresh, self.min_values) or not np.array_equal(self.history_mgr.last_upper_thresh, self.max_values):
+                    self.clear_arc_regions()
+                    self.set_sliders(self.min_values, self.max_values)
+                    self.plot_thresh_regions()
+                    self.update_mask()
+                    self.display()
+            elif event.button == 3:
+                self.clear_arc_regions()
+                p = self.get_axes_coordinates(event, dtype=float)
+                if event.key in ['control', 'ctrl+shift'] and p is not None:
+                    self.hs_region_iptr.start_dragging(Point(p.x, 0, dtype=float), event.key == 'control')
+                else:
+                    self.hs_region_iptr.start_dragging(p, event.key is None)
 
     def on_mouse_move(self, event):
         super().on_mouse_move(event)
-        p = self.get_image_coordinates(event)
-        if p in self.img_rect:
+        p = self.get_axes_coordinates(event)
+        if event.inaxes == self.ax and p in self.img_rect:
             self.transient_patches.append(
                 self.pixel_panel.text(
                     0, 5,
@@ -528,7 +529,7 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
                     )
                 )
             )
-        if p is not None and event.key is None:
+        if event.key is None and event.inaxes == self.ax:
             self.add_transient_patch(BrushTouch(
                 p, self.brush_iptr.radius, True, self.brush_iptr.brush
             ).patch(alpha=0.3))
@@ -538,10 +539,15 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
                 self.add_patch(trace.patch())
         elif self.on_slider_adjust:
             self.plot_thresh_regions()
+        elif self.hs_region_iptr.on_dragging:
+            self.clear_temp_arc_regions()
+            p = self.get_axes_coordinates(event, dtype=float)
+            self.hs_region_iptr.update(p, event.key is None)
+            self.add_arc_region(self.hs_region_iptr.rect, temporary=True)
 
     def on_mouse_release(self, event):
         super().on_mouse_release(event)
-        p = self.get_image_coordinates(event)
+        p = self.get_axes_coordinates(event)
         if self.brush_iptr.on_dragging and event.button == 3:
             if p is not None:
                 self.brush_iptr.get_trace(p)
@@ -554,11 +560,26 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             self.display()
         elif self.on_slider_adjust and event.button == 1:
             self.on_slider_adjust = False
-            self.current_lower_thresh = self.lower_thresh.copy()
-            self.current_upper_thresh = self.upper_thresh.copy()
+            self.history_mgr.add_thresh_history(self.lower_thresh, self.upper_thresh)
             self.update_mask()
             self.plot_thresh_regions()
             self.display()
+        elif self.hs_region_iptr.on_dragging:
+            p = self.get_axes_coordinates(event, dtype=float)
+            self.hs_region_iptr.finish_dragging(p, event.key is None)
+            self.clear_temp_arc_regions()
+
+            rect = self.hs_region_iptr.rect
+            if not rect.is_empty():
+                hmin = int(round(np.rad2deg(rect.left).item())) % 360
+                hmax = int(round(np.rad2deg(rect.right).item()))
+                lower_thresh = [hmin, int(round(255 * rect.top)), self.v_range.min]
+                upper_thresh = [hmax, int(round(255 * rect.bottom)), self.v_range.max]
+                self.set_sliders(lower_thresh, upper_thresh)
+                self.update_mask()
+                self.display()
+
+            self.plot_thresh_regions()
 
     def on_scroll(self, event):
         super().on_scroll(event)

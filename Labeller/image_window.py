@@ -186,9 +186,10 @@ Ctrl + mouse wheel up/down: zoom in/out
         p2 = Point(p2.x / self.img_rect.width(), p2.y / self.img_rect.height(), dtype=float)
         self.scope = translate_rect(self.scope, p1 - p2)
 
-    def add_transient_patch(self, patch):
+    def add_transient_patch(self, patch, ax=None):
         self.transient_patches.append(patch)
-        self.ax.add_patch(patch)
+        ax = ax or self.ax
+        ax.add_patch(patch)
         self.refresh()
 
     def clear_transient_patch(self):
@@ -198,10 +199,10 @@ Ctrl + mouse wheel up/down: zoom in/out
         self.transient_patches.clear()
         self.refresh()
 
-    def add_patch(self, patch, erasable=True):
-        if erasable:
-            self.patches.append(patch)
-        self.ax.add_patch(patch)
+    def add_patch(self, patch, ax=None):
+        self.patches.append(patch)
+        ax = ax or self.ax
+        ax.add_patch(patch)
         self.refresh()
 
     def hide_patches(self):
@@ -226,8 +227,8 @@ Ctrl + mouse wheel up/down: zoom in/out
         self.root.destroy()
         plt.close(self.fig)
 
-    def get_image_coordinates(self, event, dtype=int):
-        if event.inaxes == self.ax and event.xdata is not None and event.ydata is not None:
+    def get_axes_coordinates(self, event, dtype=int):
+        if event.xdata is not None and event.ydata is not None:
             return Point(event.xdata, event.ydata, dtype=dtype)
         else:
             return None
@@ -331,10 +332,10 @@ Ctrl + mouse wheel up/down: zoom in/out
             print('release', event.key)
 
     def on_mouse_press(self, event):
-        p = self.get_image_coordinates(event, float)
-        if event.key == 'control' and event.button == 1:
+        p = self.get_axes_coordinates(event, float)
+        if event.key == 'control' and event.button == 1 and event.inaxes == self.ax:
             self.panning_iptr.start_dragging(p)
-        elif event.key == 'control' and event.button == 3:
+        elif event.key == 'control' and event.button == 3 and event.inaxes == self.ax:
             self.zoom_iptr.start_dragging(p)
 
         if self.verbose:
@@ -356,12 +357,12 @@ Ctrl + mouse wheel up/down: zoom in/out
             )
         self.clear_transient_patch()
         if self.panning_iptr.on_dragging:
-            p = self.get_image_coordinates(event, float)
+            p = self.get_axes_coordinates(event, float)
             self.panning_iptr.update(p)
             self.translate_scope(self.panning_iptr.p1, self.panning_iptr.p2)
             self.adjust_view()
         elif self.zoom_iptr.on_dragging:
-            p = self.get_image_coordinates(event, float)
+            p = self.get_axes_coordinates(event, float)
             self.zoom_iptr.update(p)
             self.add_transient_patch(
                 self.zoom_iptr.rect.to_patch(
@@ -382,7 +383,7 @@ Ctrl + mouse wheel up/down: zoom in/out
                     event.button, event.x, event.y, event.key
                 )
             )
-        p = self.get_image_coordinates(event, float)
+        p = self.get_axes_coordinates(event, float)
         if self.panning_iptr.on_dragging:
             self.panning_iptr.finish_dragging(p)
             self.translate_scope(self.panning_iptr.p1, self.panning_iptr.p2)
@@ -402,8 +403,8 @@ Ctrl + mouse wheel up/down: zoom in/out
                     event.key
                 )
             )
-        p = self.get_image_coordinates(event, float)
-        if p is not None and event.key == 'control':
+        p = self.get_axes_coordinates(event, float)
+        if event.inaxes == self.ax and event.key == 'control':
             if event.step == 1:
                 self.shrink_scope(p)
                 self.adjust_view()

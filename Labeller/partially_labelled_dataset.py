@@ -1,5 +1,5 @@
-import os
 import json
+import os
 import numpy as np
 
 from skimage.io import imread
@@ -88,10 +88,6 @@ class PartiallyLabelledDataset:
     @property
     def num_images(self):
         return len(self.image_files)
-
-    @property
-    def name(self):
-        return os.path.basename(self.root)
 
     def __len__(self):
         return self.num_images
