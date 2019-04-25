@@ -1,55 +1,14 @@
 import tkinter as tk
+from functools import partial
+
 import matplotlib.pyplot as plt
 import numpy as np
-
-from functools import partial
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from .drag_interpreter import DragInterpreter
 from .geometry import Point, Rectangle, get_rect, grow_rect, translate_rect
 from .popups import MessageBox, MultipleChoiceQuestionAsker, YesNoQuestionAsker
-
-
-# named colors in matplotlib: https://stackoverflow.com/questions/22408237/named-colors-in-matplotlib
-# tk.TclError is raised when canvas.draw() is called while canvas is already closed by the user
-def on_enter_figure(verbose, event):
-    try:
-        if verbose:
-            print('enter_figure', event.canvas.figure)
-        event.canvas.figure.patch.set_facecolor('white')
-        event.canvas.draw()
-    except tk.TclError as e:
-        pass
-
-
-def on_leave_figure(verbose, event):
-    try:
-        if verbose:
-            print('enter_figure', event.canvas.figure)
-        event.canvas.figure.patch.set_facecolor('whitesmoke')
-        event.canvas.draw()
-    except tk.TclError as e:
-        pass
-
-
-def on_enter_axes(verbose, event):
-    try:
-        if verbose:
-            print('enter_axes', event.inaxes)
-        event.inaxes.patch.set_facecolor('lightyellow')
-        event.canvas.draw()
-    except tk.TclError as e:
-        pass
-
-
-def on_leave_axes(verbose, event):
-    try:
-        if verbose:
-            print('enter_axes', event.inaxes)
-        event.inaxes.patch.set_facecolor('lightgoldenrodyellow')
-        event.canvas.draw()
-    except tk.TclError as e:
-        pass
+from .utils import caps_lock_status, on_caps_lock_off
 
 
 class ImageWindow(object):
@@ -237,37 +196,76 @@ Ctrl + mouse wheel up/down: zoom in/out
         self.root.mainloop()
         return 0
 
+    # named colors in matplotlib: https://stackoverflow.com/questions/22408237/named-colors-in-matplotlib
+    # tk.TclError is raised when canvas.draw() is called while canvas is already closed by the user
+    def on_enter_figure(self, event):
+        try:
+            if self.verbose:
+                print('enter_figure', event.canvas.figure)
+            event.canvas.figure.patch.set_facecolor('white')
+            event.canvas.draw()
+        except tk.TclError:
+            pass
+
+    def on_leave_figure(self, event):
+        try:
+            if self.verbose:
+                print('enter_figure', event.canvas.figure)
+            event.canvas.figure.patch.set_facecolor('whitesmoke')
+            event.canvas.draw()
+        except tk.TclError:
+            pass
+
+    def on_enter_axes(self, event):
+        try:
+            if self.verbose:
+                print('enter_axes', event.inaxes)
+            event.inaxes.patch.set_facecolor('lightyellow')
+            event.canvas.draw()
+        except tk.TclError:
+            pass
+
+    def on_leave_axes(self, event):
+        try:
+            if self.verbose:
+                print('enter_axes', event.inaxes)
+            event.inaxes.patch.set_facecolor('lightgoldenrodyellow')
+            event.canvas.draw()
+        except tk.TclError:
+            pass
+
     def enable_callbacks(self):
-        self.cids.append(
-            self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
-        )
-        self.cids.append(
-            self.fig.canvas.mpl_connect('key_release_event', self.on_key_release)
-        )
-        self.cids.append(
-            self.fig.canvas.mpl_connect('button_press_event', self.on_mouse_press)
-        )
-        self.cids.append(
-            self.fig.canvas.mpl_connect('button_release_event', self.on_mouse_release)
-        )
-        self.cids.append(
-            self.fig.canvas.mpl_connect('scroll_event', self.on_scroll)
-        )
-        self.cids.append(
-            self.fig.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
-        )
-        self.cids.append(
-            self.fig.canvas.mpl_connect('figure_enter_event', partial(on_enter_figure, self.verbose))
-        )
-        self.cids.append(
-            self.fig.canvas.mpl_connect('figure_leave_event', partial(on_leave_figure, self.verbose))
-        )
-        self.cids.append(
-            self.fig.canvas.mpl_connect('axes_enter_event', partial(on_enter_axes, self.verbose))
-        )
-        self.cids.append(
-            self.fig.canvas.mpl_connect('axes_leave_event', partial(on_leave_axes, self.verbose))
-        )
+        if not self.callbacks_alive:
+            self.cids.append(
+                self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
+            )
+            self.cids.append(
+                self.fig.canvas.mpl_connect('key_release_event', self.on_key_release)
+            )
+            self.cids.append(
+                self.fig.canvas.mpl_connect('button_press_event', self.on_mouse_press)
+            )
+            self.cids.append(
+                self.fig.canvas.mpl_connect('button_release_event', self.on_mouse_release)
+            )
+            self.cids.append(
+                self.fig.canvas.mpl_connect('scroll_event', self.on_scroll)
+            )
+            self.cids.append(
+                self.fig.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
+            )
+            self.cids.append(
+                self.fig.canvas.mpl_connect('figure_enter_event', self.on_enter_figure)
+            )
+            self.cids.append(
+                self.fig.canvas.mpl_connect('figure_leave_event', self.on_leave_figure)
+            )
+            self.cids.append(
+                self.fig.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
+            )
+            self.cids.append(
+                self.fig.canvas.mpl_connect('axes_leave_event', self.on_leave_axes)
+            )
 
     def disable_callbacks(self):
         for cid in self.cids:
@@ -316,6 +314,7 @@ Ctrl + mouse wheel up/down: zoom in/out
         notifier.mainloop()
         self.enable_callbacks()
 
+    @on_caps_lock_off
     def on_key_press(self, event):
         if event.key == 'escape':
             self.close()
@@ -328,14 +327,16 @@ Ctrl + mouse wheel up/down: zoom in/out
             print('press', event.key)
 
     def on_key_release(self, event):
+        if caps_lock_status():
+            self.show_message('Caps Lock is turned on. Please turn it off.', 'Warning')
         if self.verbose:
             print('release', event.key)
 
     def on_mouse_press(self, event):
         p = self.get_axes_coordinates(event, float)
-        if event.key == 'control' and event.button == 1 and event.inaxes == self.ax:
+        if event.key == 'control' and event.button == 1 and event.inaxes is self.ax:
             self.panning_iptr.start_dragging(p)
-        elif event.key == 'control' and event.button == 3 and event.inaxes == self.ax:
+        elif event.key == 'control' and event.button == 3 and event.inaxes is self.ax:
             self.zoom_iptr.start_dragging(p)
 
         if self.verbose:
@@ -394,6 +395,7 @@ Ctrl + mouse wheel up/down: zoom in/out
             self.scope = self.get_scope(self.zoom_iptr.rect)
             self.adjust_view()
 
+    @on_caps_lock_off
     def on_scroll(self, event):
         if self.verbose:
             print(
@@ -404,7 +406,7 @@ Ctrl + mouse wheel up/down: zoom in/out
                 )
             )
         p = self.get_axes_coordinates(event, float)
-        if event.inaxes == self.ax and event.key == 'control':
+        if event.inaxes is self.ax and event.key == 'control':
             if event.step == 1:
                 self.shrink_scope(p)
                 self.adjust_view()

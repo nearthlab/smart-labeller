@@ -1,10 +1,28 @@
 import colorsys
 import random
+import subprocess
 import warnings
+
 import cv2
 import numpy as np
 
 from .geometry import Point, Rectangle, extract_bbox
+
+
+def caps_lock_status():
+    # Check if caps lock is on
+    result = str(subprocess.check_output('xset -q | grep Caps', shell=True))
+    return 'on' in result[result.find('00:'):result.find('01:')]
+
+
+def on_caps_lock_off(func):
+    def wrapper(*args, **kwargs):
+        if not caps_lock_status():
+            return func(*args, **kwargs)
+        else:
+            return None
+
+    return wrapper
 
 
 def hide_axes_labels(axes, hide='xy'):
@@ -25,6 +43,18 @@ def preprocess_mask(mask):
     prob_mask[bbox.to_mask(prob_mask.shape) == 0] = 0
 
     return prob_mask
+
+
+def merge_gc_mask(gc_mask, mask):
+    #                     mask |   0   1
+    #  gc_mask                 |
+    # -------------------------|--------
+    #   0(BG)                  |   0   0
+    #   1(FG)                  |   0   1
+    #   2(PBG)                 |   2   2
+    #   3(PFG)                 |   2   3
+    q, r = gc_mask.__divmod__(2)
+    return 2 * q + mask * r
 
 
 def grabcut(img, mode, mask=None, rect=None):
@@ -52,7 +82,7 @@ def grabcut(img, mode, mask=None, rect=None):
     return mask
 
 
-def random_colors(N, bright=True):
+def random_colors(N, bright=True, seed=4, uint8=False):
     """
     Generate random colors.
     To get visually distinct colors, generate them in HSV space then
@@ -62,8 +92,11 @@ def random_colors(N, bright=True):
     hsv = [(i / N, 1, brightness) for i in range(N)]
     colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
     # Use random.Random(*) to produce the same sequence of random colors every time
-    random.Random(4).shuffle(colors)
-    return colors
+    random.Random(seed).shuffle(colors)
+    if uint8:
+        return np.clip(np.array(colors) * 255, 0, 255).astype(np.uint8)
+    else:
+        return colors
 
 
 def overlay_mask(image, mask, color, alpha=0.5):
@@ -232,3 +265,26 @@ def largest_connected_component(mask: np.ndarray):
         return connected_components.background()
     else:
         return connected_components.mask(0)
+
+
+def filter_by_area(mask: np.ndarray, area_ratio_thresh: float):
+    connected_components = ConnectedComponents(mask)
+
+    if len(connected_components) > 0:
+        area_thresh = connected_components.area(0) * area_ratio_thresh
+        j = 0
+        for i in reversed(range(len(connected_components))):
+            if connected_components.area(i) > area_thresh:
+                j = i
+                break
+            else:
+                continue
+
+        filtered = np.zeros_like(mask)
+        for i in range(j+1):
+            filtered = np.maximum(filtered, connected_components.mask(i))
+
+        return filtered
+    else:
+        warnings.warn('Couldn\'t find any connected component in the foreground')
+        return connected_components.background()

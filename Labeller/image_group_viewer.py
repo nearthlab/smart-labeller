@@ -5,6 +5,7 @@ from abc import *
 from math import log10
 from .image_window import ImageWindow
 from .popups import ScrollableMenubar
+from .utils import on_caps_lock_off
 
 
 class ImageGroupViewer(ImageWindow, metaclass=ABCMeta):
@@ -83,9 +84,14 @@ d or right arrow: go to the next image
         if self.num_items == 0:
             raise Exception('No images to display')
 
+    @on_caps_lock_off
     def on_key_press(self, event):
         super().on_key_press(event)
         if event.key in ['left', 'a']:
             self.id = (self.id - 1) % self.num_items
         elif event.key in ['right', 'd']:
             self.id = (self.id + 1) % self.num_items
+        elif event.key == 'home':
+            self.id = 0
+        elif event.key == 'end':
+            self.id = self.num_items - 1

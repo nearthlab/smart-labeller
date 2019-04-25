@@ -5,10 +5,12 @@ import cv2
 import numpy as np
 
 from .drag_interpreter import DragInterpreter
+from .image_window import ImageWindow
 from .image_group_viewer import ImageGroupViewer
 from .mask_editor import MaskEditor
-from .partially_labelled_dataset import PartiallyLabelledDataset, ObjectAnnotation
-from .utils import random_colors, grabcut, fill_holes, hide_axes_labels
+from .partially_labelled_dataset import PartiallyLabelledDataset, ObjectAnnotation, create_rgb_mask
+from .utils import (random_colors, grabcut, fill_holes,
+                    hide_axes_labels, on_caps_lock_off)
 
 
 class LabelHelper(ImageGroupViewer):
@@ -26,17 +28,25 @@ mouse right + dragging: add a new object
         super().__init__(
             [os.path.basename(image_file) for image_file in dataset.image_files],
             dataset.root,
-            ImageGroupViewer.DEFAULT_AXES_POSITION if info is None else (0.05, 0.125, 0.75, 0.75)
+            (0.05, 0.125, 0.75, 0.75)
         )
         self.dataset = dataset
         self.info = info or {}
+        info_panel_top = 0.64
         if len(self.info) > 0:
             num_items = len(list(self.info.values())[0])
-            self.info_panel = self.fig.add_axes((0.81, 0.125, 0.14, min(0.07 * num_items, 0.75)))
+            info_panel_top = 0.14 + min(0.07 * num_items, 0.5)
+            self.info_panel = self.fig.add_axes((0.81, 0.125, 0.14, min(0.07 * num_items, 0.5)))
             self.info_panel.set_facecolor('lightgoldenrodyellow')
             hide_axes_labels(self.info_panel)
+
+        self.rgb_mask_panel = self.fig.add_axes((0.81, info_panel_top + 0.01, 0.125, 0.875 - info_panel_top))
+        self.rgb_mask = np.array(())
+        hide_axes_labels(self.rgb_mask_panel)
+
         self.mode = cv2.GC_INIT_WITH_RECT
-        self.pallete = random_colors(100)
+        self.obj_pallete = random_colors(100)
+        self.cls_pallete = random_colors(self.dataset.num_classes, bright=False, seed=6, uint8=True)
         self.rect_ipr = DragInterpreter()
         self.obj_id = 0
 
@@ -57,11 +67,14 @@ mouse right + dragging: add a new object
             if filename in self.info:
                 self.info_panel.clear()
 
-                def resolve_lines(s, max_len):
+                def resolve_lines(s, max_len, max_lines=6):
                     q, r = len(s).__divmod__(max_len)
                     lines = [s[i * max_len:(i + 1) * max_len] for i in range(q)]
                     if r > 0:
                         lines.append(s[-r:])
+                    if len(lines) > max_lines:
+                        lines = lines[:max_lines]
+                        lines[-1] = lines[-1][-3] + '...'
                     return '\n'.join(lines)
 
                 keys = list(sorted(self.info[filename].keys()))
@@ -88,9 +101,9 @@ mouse right + dragging: add a new object
                     )
 
         for obj_id, annotation in enumerate(self.annotations):
-            alpha = 0.7 if obj_id == self.obj_id else 0.3
-            linewidth = 2 if obj_id == self.obj_id else 1
-            color = self.pallete[obj_id]
+            alpha = 0.3 if obj_id == self.obj_id else 0.1
+            linewidth = 3 if obj_id == self.obj_id else 1
+            color = self.obj_pallete[obj_id]
             bbox = annotation.bbox
             self.add_patch(bbox.to_patch(
                 linewidth=linewidth,
@@ -111,6 +124,10 @@ mouse right + dragging: add a new object
                 bbox=dict(facecolor=color, alpha=alpha)
             ))
 
+        self.rgb_mask = create_rgb_mask(self.annotations, self.cls_pallete, self.img.shape)
+        self.rgb_mask_panel.clear()
+        self.rgb_mask_panel.imshow(self.rgb_mask)
+
         self.ax.set_title(
             'FILENAME: {} | IMAGE ID: {} | OBJECT ID: {} | OBJECT CLASS: {}'.format(
                 filename, self.id, self.obj_id,
@@ -125,8 +142,14 @@ mouse right + dragging: add a new object
         self.save_current_labels()
 
     def save_current_labels(self):
-        with open(self.dataset.infer_label_path(self.id), 'w') as fp:
-            json.dump([annotation.json() for annotation in self.annotations], fp)
+        prev_annotations = self.dataset.load_annotations(self.id)
+        if prev_annotations != self.annotations:
+            label_path = self.dataset.infer_label_path(self.id)
+            if len(self.annotations) == 0:
+                os.remove(label_path)
+            else:
+                with open(label_path, 'w') as fp:
+                    json.dump([annotation.json() for annotation in self.annotations], fp)
 
     def remove_current_object(self):
         if self.obj_id < len(self.annotations):
@@ -171,6 +194,7 @@ mouse right + dragging: add a new object
         self.enable_callbacks()
         self.force_focus()
 
+    @on_caps_lock_off
     def on_key_press(self, event):
         if event.key in ['left', 'right', 'a', 'd', 'escape']:
             self.save_current_labels()
@@ -183,28 +207,65 @@ mouse right + dragging: add a new object
             if event.key in ['w', 'up']:
                 if len(self.annotations) > 0:
                     self.obj_id = (self.obj_id + 1) % len(self.annotations)
-                    self.display()
             elif event.key in ['s', 'down']:
                 if len(self.annotations) > 0:
                     self.obj_id = (self.obj_id - 1) % len(self.annotations)
-                    self.display()
+            elif event.key in ['W', 'shift+up']:
+                if len(self.annotations) > 1:
+                    next_obj_id = (self.obj_id + 1) % len(self.annotations)
+                    self.annotations[self.obj_id], self.annotations[next_obj_id] = self.annotations[next_obj_id], self.annotations[self.obj_id]
+                    self.obj_id = next_obj_id
+            elif event.key in ['S', 'shift+down']:
+                if len(self.annotations) > 1:
+                    prev_obj_id = (self.obj_id + 1) % len(self.annotations)
+                    self.annotations[self.obj_id], self.annotations[prev_obj_id] = self.annotations[prev_obj_id], self.annotations[self.obj_id]
+                    self.obj_id = prev_obj_id
             elif event.key == 'ctrl+d':
                 self.remove_current_object()
-                self.display()
             elif event.key == 'ctrl+e':
                 self.mask_editor_session()
-                self.display()
+            elif event.key == 'ctrl+a':
+                class_id = self.ask_class_id()
+                if class_id != -1:
+                    self.annotations.append(ObjectAnnotation(
+                        self.img_rect.to_mask(self.img.shape[:2]),
+                        class_id
+                    ))
+            elif event.key == 'ctrl+D':
+                answer = self.ask_yes_no_question('Do you want to delete the current image file?')
+                if answer:
+                    os.remove(self.dataset.image_files[self.id])
+                    label_path = self.dataset.infer_label_path(self.id)
+                    if os.path.isfile(label_path):
+                        os.remove(label_path)
+                    self.dataset.load(self.dataset.root)
+                    self.prev_id = (self.id - 1) % self.num_items
+            elif event.key == 'm':
+                class_id = self.ask_class_id()
+                if class_id != -1:
+                    self.annotations[self.obj_id].class_id = class_id
+            elif event.key == 'j':
+                first_unlabeled = 0
+                for i in range(self.num_items):
+                    if os.path.isfile(self.dataset.infer_label_path(i)):
+                        continue
+                    else:
+                        first_unlabeled = i
+                        break
+                self.prev_id, self.id = self.id, (first_unlabeled - 1) % self.num_items
+
+            self.display()
 
     def on_mouse_press(self, event):
         super().on_mouse_press(event)
         p = self.get_axes_coordinates(event)
-        if event.key is None and event.button == 3:
+        if event.key in [None, 'shift'] and event.button == 3 and event.inaxes is self.ax:
             self.rect_ipr.start_dragging(p)
 
     def on_mouse_move(self, event):
         super().on_mouse_move(event)
+        p = self.get_axes_coordinates(event)
         if self.rect_ipr.on_dragging:
-            p = self.get_axes_coordinates(event)
             self.rect_ipr.update(p)
             self.add_transient_patch(self.rect_ipr.rect.to_patch(
                 linewidth=1,
@@ -212,6 +273,21 @@ mouse right + dragging: add a new object
                 edgecolor='b',
                 facecolor='none'
             ))
+        elif event.inaxes is self.rgb_mask_panel and p in self.img_rect:
+            match = np.where((self.cls_pallete == self.rgb_mask[p.y][p.x]).all(axis=-1))[0]
+            class_name = 'background' if len(match) == 0 else self.dataset.class_id2name[match[0]]
+
+            self.transient_patches.append(
+                self.rgb_mask_panel.text(
+                    0, -1,
+                    class_name,
+                    bbox=dict(
+                        linewidth=1, alpha=0.0,
+                        edgecolor='none',
+                        facecolor='none',
+                    )
+                )
+            )
 
     def on_mouse_release(self, event):
         super().on_mouse_release(event)
@@ -222,7 +298,7 @@ mouse right + dragging: add a new object
             self.clear_transient_patch()
             if class_id != -1:
                 mask = grabcut(self.img, cv2.GC_INIT_WITH_RECT, rect=self.rect_ipr.rect)
-                if np.array_equal(mask % 2 == 1, np.zeros_like(mask)):
+                if np.array_equal(mask % 2 == 1, np.zeros_like(mask)) or event.key == 'shift':
                     # If the initial grabcut failed to find any foreground pixels
                     # set the mask as the rectangle region itself
                     self.annotations.append(ObjectAnnotation(

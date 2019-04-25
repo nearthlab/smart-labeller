@@ -1,8 +1,9 @@
 import json
 import os
-import numpy as np
 
+import numpy as np
 from skimage.io import imread
+
 from .geometry import polygons_to_mask, mask_to_polygons, Polygon, extract_bbox_multi
 
 
@@ -75,6 +76,13 @@ def load_annotations(file_path):
     for raw_anno in raw_annos:
         annos.append(ObjectAnnotation(json.dumps(raw_anno)))
     return annos
+
+
+def create_rgb_mask(annos, pallete, shape):
+    mask = np.zeros(shape, dtype=np.uint8)
+    for anno in annos:
+        mask[anno.mask(shape[:2]) != 0] = pallete[anno.class_id]
+    return mask
 
 
 class PartiallyLabelledDataset:

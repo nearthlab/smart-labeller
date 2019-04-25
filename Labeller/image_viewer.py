@@ -2,6 +2,7 @@ import os
 
 from skimage.io import imread
 from .image_group_viewer import ImageGroupViewer
+from .utils import on_caps_lock_off
 
 
 class ImageViewer(ImageGroupViewer):
@@ -29,6 +30,7 @@ class ImageViewer(ImageGroupViewer):
             )
             self.set_title(title)
 
+    @on_caps_lock_off
     def on_key_press(self, event):
         super().on_key_press(event)
         self.display()
