@@ -226,9 +226,7 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         if hasattr(self, 'sliders'):
             for i in range(3):
                 self.thresh_sliders[self.lower_names[i]].set_active(True)
-                # self.cids.append(self.thresh_sliders[self.lower_names[i]].on_changed(partial(self.thresh_slider_callback, i, 'lower')))
                 self.thresh_sliders[self.upper_names[i]].set_active(True)
-                # self.cids.append(self.thresh_sliders[self.upper_names[i]].on_changed(partial(self.thresh_slider_callback, i, 'upper')))
 
     def disable_callbacks(self):
         super().disable_callbacks()
