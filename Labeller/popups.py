@@ -23,6 +23,8 @@ class MessageBox:
         self.label = tk.Label(self.root, text=msg)
         self.label.pack()
         tk.Button(self.root, text='Ok', command=self.close).pack()
+        self.root.bind('<Return>', lambda x: self.close())
+        self.root.bind('<Escape>', lambda x: self.close())
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
     def close(self):
@@ -34,18 +36,30 @@ class MessageBox:
 
 
 class MultipleChoiceQuestionAsker:
-    def __init__(self, prompt: str, options: tuple, cx, cy, title='Options', width=300, height=150):
+    def __init__(self, prompt: str, options: tuple,
+                 cx, cy,
+                 title='Options', width=300, height=150):
         self.root = tk.Tk()
         self.root.title(title)
-        self.root.geometry('{}x{}+{}+{}'.format(width, height, cx - width // 2, cy - height // 2))
-        self.value = -1
+        self.root.geometry('{}x{}+{}+{}'.format(
+            width, height, cx - width // 2, cy - height // 2
+        ))
+        self.value = 0
 
         tk.Label(self.root, text=prompt, wraplength=4 * width // 5).pack()
         for i, option in enumerate(options):
-            tk.Radiobutton(self.root, text=option, value=i, command=partial(self.set_value, v=i)).pack(anchor="w")
+            button = tk.Radiobutton(
+                self.root, text=option, value=i,
+                command=partial(self.set_value, v=i)
+            )
+            if i == 0:
+                button.select()
+            button.pack(anchor="w")
 
         tk.Button(self.root, text="Ok", command=self.close).pack()
         tk.Button(self.root, text="Quit", command=self.quit).pack()
+        self.root.bind('<Return>', lambda x: self.close())
+        self.root.bind('<Escape>', lambda x: self.quit())
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
 
     def set_value(self, v):
@@ -75,6 +89,8 @@ class YesNoQuestionAsker:
 
         tk.Button(self.root, text="Yes", command=partial(self.set_value, v=True)).pack()
         tk.Button(self.root, text="No", command=partial(self.set_value, v=False)).pack()
+        self.root.bind('<Return>', lambda x: self.set_value(True))
+        self.root.bind('<Escape>', lambda x: self.set_value(False))
         self.root.protocol("WM_DELETE_WINDOW", partial(self.set_value, v=False))
 
     def set_value(self, v):

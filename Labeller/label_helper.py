@@ -48,6 +48,7 @@ mouse right + dragging: add a new object
         self.obj_pallete = random_colors(100)
         self.cls_pallete = random_colors(self.dataset.num_classes, bright=False, seed=6, uint8=True)
         self.rect_ipr = DragInterpreter()
+        self.auto_grabcut = True
         self.obj_id = 0
 
         self.display()
@@ -63,6 +64,7 @@ mouse right + dragging: add a new object
             self.img = self.dataset.load_image(self.id)
             self.annotations = self.dataset.load_annotations(self.id)
             self.set_image(self.img)
+            self.obj_id = 0
 
             if filename in self.info:
                 self.info_panel.clear()
@@ -132,7 +134,7 @@ mouse right + dragging: add a new object
             'FILENAME: {} | IMAGE ID: {} | OBJECT ID: {} | OBJECT CLASS: {}'.format(
                 filename, self.id, self.obj_id,
                 self.dataset.class_id2name[self.annotations[self.obj_id].class_id]
-            ) if len(self.annotations) > 0 else 'FILENAME: {} | IMAGE ID: {} | NO OBJECT'.format(
+            ) if len(self.annotations) > self.obj_id else 'FILENAME: {} | IMAGE ID: {} | NO OBJECT'.format(
                 filename, self.id
             )
         )
@@ -259,8 +261,9 @@ mouse right + dragging: add a new object
     def on_mouse_press(self, event):
         super().on_mouse_press(event)
         p = self.get_axes_coordinates(event)
-        if event.key in [None, 'shift'] and event.button == 3 and event.inaxes is self.ax:
+        if event.button == 3 and event.inaxes is self.ax:
             self.rect_ipr.start_dragging(p)
+            self.auto_grabcut = (event.key != 'shift')
 
     def on_mouse_move(self, event):
         super().on_mouse_move(event)
@@ -275,7 +278,7 @@ mouse right + dragging: add a new object
             ))
         elif event.inaxes is self.rgb_mask_panel and p in self.img_rect:
             match = np.where((self.cls_pallete == self.rgb_mask[p.y][p.x]).all(axis=-1))[0]
-            class_name = 'background' if len(match) == 0 else self.dataset.class_id2name[match[0]]
+            class_name = 'Background' if len(match) == 0 else self.dataset.class_id2name[match[0]]
 
             self.transient_patches.append(
                 self.rgb_mask_panel.text(
@@ -294,24 +297,34 @@ mouse right + dragging: add a new object
         p = self.get_axes_coordinates(event)
         if self.rect_ipr.on_dragging:
             self.rect_ipr.finish_dragging(p)
-            class_id = self.ask_class_id()
+
             self.clear_transient_patch()
-            if class_id != -1:
-                mask = grabcut(self.img, cv2.GC_INIT_WITH_RECT, rect=self.rect_ipr.rect)
-                if np.array_equal(mask % 2 == 1, np.zeros_like(mask)) or event.key == 'shift':
-                    # If the initial grabcut failed to find any foreground pixels
-                    # set the mask as the rectangle region itself
-                    self.annotations.append(ObjectAnnotation(
-                        self.rect_ipr.rect.to_mask(mask.shape),
-                        class_id
-                    ))
-                else:
-                    # Most of the semantic/instance segmentation datasets require
-                    # object masks to be simply connected (i.e. contains no holes)
-                    # So fill the holes final (probably) foreground mask
-                    self.annotations.append(ObjectAnnotation(
-                        fill_holes(np.where(mask % 2 == 1, 255, 0).astype('uint8')),
-                        class_id
-                    ))
-                self.obj_id = len(self.annotations) - 1
-                self.display()
+            rect = self.rect_ipr.rect.intersect(self.img_rect)
+            if rect.tl_corner != rect.br_corner:
+                class_id = self.ask_class_id()
+                if class_id != -1:
+                    rect_mask = rect.to_mask(self.img.shape[:2])
+
+                    if self.auto_grabcut:
+                        mask = grabcut(self.img, cv2.GC_INIT_WITH_RECT, rect=self.rect_ipr.rect)
+                        # If the initial grabcut fails to find any foreground pixels
+                        # set the mask as the rectangle region itself
+                        if np.array_equal(mask % 2 == 1, np.zeros_like(mask)):
+                            self.annotations.append(ObjectAnnotation(
+                                rect_mask, class_id
+                            ))
+                        else:
+                            # Most of the semantic/instance segmentation datasets require
+                            # object masks to be simply connected (i.e. contains no holes)
+                            # So fill the holes final (probably) foreground mask
+                            self.annotations.append(ObjectAnnotation(
+                                fill_holes(np.where(mask % 2 == 1, 255, 0).astype('uint8')),
+                                class_id
+                            ))
+                    else:
+                        self.annotations.append(ObjectAnnotation(
+                            rect_mask, class_id
+                        ))
+
+                    self.obj_id = len(self.annotations) - 1
+                    self.display()

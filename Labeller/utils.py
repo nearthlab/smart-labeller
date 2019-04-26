@@ -77,6 +77,7 @@ def grabcut(img, mode, mask=None, rect=None):
 
     rect = Rectangle() if rect is None else rect
     mask = np.zeros(img.shape[:2], dtype=np.uint8) if mask is None else mask
+
     cv2.grabCut(img, mask, tuple(rect), bgdmodel, fgdmodel, 1, mode)
 
     return mask
@@ -262,7 +263,7 @@ def largest_connected_component(mask: np.ndarray):
     connected_components = ConnectedComponents(mask)
     if len(connected_components) == 0:
         warnings.warn('Couldn\'t find any connected component in the foreground')
-        return connected_components.background()
+        return np.ones_like(mask)
     else:
         return connected_components.mask(0)
 
@@ -287,4 +288,4 @@ def filter_by_area(mask: np.ndarray, area_ratio_thresh: float):
         return filtered
     else:
         warnings.warn('Couldn\'t find any connected component in the foreground')
-        return connected_components.background()
+        return np.ones_like(mask)
