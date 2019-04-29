@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import shapely.geometry as geom
+import warnings
 
 from matplotlib import patches as patches
 from skimage import measure
@@ -356,7 +357,11 @@ def mask_to_polygons(mask):
             contour[i] = (col - 1, row - 1)
 
         # Make a polygon and simplify it
-        fpoly = Polygon(contour).simplify(0.5, preserve_topology=False)
+        try:
+            fpoly = Polygon(contour).simplify(0.5, preserve_topology=False)
+        except NotImplementedError as e:
+            warnings.warn('Multi-part geometries do not themselves provide the array interface')
+            fpoly = Polygon(contour)
         if not fpoly.degenerate():
             polys.append(Polygon(fpoly.to_ndarray()))
 

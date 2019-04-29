@@ -5,11 +5,10 @@ import cv2
 import numpy as np
 
 from .drag_interpreter import DragInterpreter
-from .image_window import ImageWindow
 from .image_group_viewer import ImageGroupViewer
 from .mask_editor import MaskEditor
 from .partially_labelled_dataset import PartiallyLabelledDataset, ObjectAnnotation, create_rgb_mask
-from .utils import (random_colors, grabcut, fill_holes,
+from .utils import (random_colors, grabcut, ConnectedComponents,
                     hide_axes_labels, on_caps_lock_off)
 
 
@@ -193,7 +192,6 @@ mouse right + dragging: add a new object
                 elif answer == 2:
                     class_id = self.ask_class_id()
                     if class_id != -1:
-                        from .utils import ConnectedComponents
                         comps = ConnectedComponents(np.where(mask % 2 == 1, 255, 0).astype(np.uint8))
                         for i in range(len(comps)):
                             self.annotations.insert(
