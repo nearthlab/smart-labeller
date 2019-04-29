@@ -173,7 +173,7 @@ mouse right + dragging: add a new object
             self.enable_menubar()
 
             if mask is not None:
-                answer = self.ask_multiple_choice_question('Save edited mask as:', ('Overwrite the current object mask', 'Add as a new object', 'Do not save'))
+                answer = self.ask_multiple_choice_question('Save edited mask as:', ('Overwrite the current object mask', 'Add as a new object', 'Add each component as a new object', 'Do not save'))
                 if answer == 0:
                     self.annotations[self.obj_id] = ObjectAnnotation(
                         np.where(mask % 2 == 1, 255, 0).astype('uint8'),
@@ -185,11 +185,24 @@ mouse right + dragging: add a new object
                         self.annotations.insert(
                             self.obj_id + 1,
                             ObjectAnnotation(
-                                np.where(mask % 2 == 1, 255, 0).astype('uint8'),
+                                np.where(mask % 2 == 1, 255, 0).astype(np.uint8),
                                 class_id
                             )
                         )
                         self.obj_id += 1
+                elif answer == 2:
+                    class_id = self.ask_class_id()
+                    if class_id != -1:
+                        from .utils import ConnectedComponents
+                        comps = ConnectedComponents(np.where(mask % 2 == 1, 255, 0).astype(np.uint8))
+                        for i in range(len(comps)):
+                            self.annotations.insert(
+                                self.obj_id + i + 1,
+                                ObjectAnnotation(
+                                    comps.mask(i),
+                                    class_id
+                                )
+                            )
         else:
             self.show_message('Please add an object by drawing a rectangle first', 'Guide')
 
@@ -261,7 +274,7 @@ mouse right + dragging: add a new object
     def on_mouse_press(self, event):
         super().on_mouse_press(event)
         p = self.get_axes_coordinates(event)
-        if event.button == 3 and event.inaxes is self.ax:
+        if event.button == 3 and event.key != 'control' and event.inaxes is self.ax:
             self.rect_ipr.start_dragging(p)
             self.auto_grabcut = (event.key != 'shift')
 
@@ -314,11 +327,8 @@ mouse right + dragging: add a new object
                                 rect_mask, class_id
                             ))
                         else:
-                            # Most of the semantic/instance segmentation datasets require
-                            # object masks to be simply connected (i.e. contains no holes)
-                            # So fill the holes final (probably) foreground mask
                             self.annotations.append(ObjectAnnotation(
-                                fill_holes(np.where(mask % 2 == 1, 255, 0).astype('uint8')),
+                                np.where(mask % 2 == 1, 255, 0).astype('uint8'),
                                 class_id
                             ))
                     else:

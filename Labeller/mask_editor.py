@@ -14,7 +14,7 @@ from .image_window import ImageWindow
 from .utils import (preprocess_mask, merge_gc_mask,
                     grabcut, overlay_mask, threshold_hsv,
                     HRange, SRange, VRange, get_arc_regions,
-                    fill_holes, largest_connected_component,
+                    fill_holes_gc, largest_connected_component,
                     filter_by_area, on_caps_lock_off, hide_axes_labels)
 
 
@@ -157,8 +157,25 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         self.lc_switch = RadioButtons(self.lc_panel, ('off', 'on'))
         self.lc_switch.on_clicked(lambda x: self.update_mask() or self.history_mgr.add_switch_history('lc') or self.display())
 
+        # Create fill holes panel
+        self.fh_panel = self.fig.add_axes(((len(BrushType) + 3) * unit, 0.9, unit, unit))
+        hide_axes_labels(self.fh_panel)
+        self.fh_panel.text(
+            -0.45, -0.7,
+            'Fill Holes',
+            bbox=dict(
+                linewidth=1,
+                edgecolor='goldenrod',
+                facecolor='none',
+                alpha=1.0
+            )
+        )
+        self.fh_panel.imshow(np.array([[[255, 255, 224]]], dtype=np.uint8))
+        self.fh_switch = RadioButtons(self.fh_panel, ('off', 'on'))
+        self.fh_switch.on_clicked(lambda x: self.update_mask() or self.history_mgr.add_switch_history('fh') or self.display())
+
         # Create component area threshold panel
-        self.area_panel = self.fig.add_axes(((len(BrushType) + 3) * unit, 0.9 + 0.3 * unit, 3 * unit, 0.3 * unit), facecolor=axcolor)
+        self.area_panel = self.fig.add_axes(((len(BrushType) + 5) * unit, 0.9 + 0.3 * unit, 3 * unit, 0.3 * unit), facecolor=axcolor)
         hide_axes_labels(self.area_panel)
         self.area_panel.text(
             -0.45, 1.7,
@@ -279,6 +296,9 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             for brush_touch in brush_trace:
                 self.gc_mask = apply_brush_touch(self.gc_mask, brush_touch)
 
+        if self.fill_holes:
+            self.gc_mask = fill_holes_gc(self.gc_mask)
+
         if self.largest_component_only:
             component_mask = (largest_connected_component(
                 np.where(self.gc_mask % 2 == 1, 255, 0).astype(np.uint8)
@@ -290,16 +310,6 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             ) // 255).astype(np.uint8)
 
         self.gc_mask = merge_gc_mask(self.gc_mask, component_mask)
-
-        # Most of the semantic/instance segmentation datasets require
-        # object masks to be simply connected (i.e. contains no holes)
-        # So fill the holes in final (probably) foreground mask
-        fg = np.where(self.gc_mask == 1, 255, 0).astype(np.uint8)
-        pfg = np.where(self.gc_mask == 3, 255, 0).astype(np.uint8)
-        filled_fg = fill_holes(fg)
-        filled_pfg = fill_holes(pfg)
-        self.gc_mask[filled_fg == 255] = 1
-        self.gc_mask[filled_pfg == 255] = 3
 
     def update_brush_panel(self):
         for item in self.brush_indicator:
@@ -324,6 +334,10 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
     @property
     def largest_component_only(self):
         return self.lc_switch.value_selected == 'on'
+
+    @property
+    def fill_holes(self):
+        return self.fh_switch.value_selected == 'on'
 
     def set_sliders(self, lower_thresh, upper_thresh, write_history=True):
         for i, vals in enumerate(zip(lower_thresh, upper_thresh)):
@@ -495,6 +509,10 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
                     idx = 0 if self.lc_switch.value_selected == 'off' else 1
                     self.lc_switch.set_active(1 - idx)
                     self.history_mgr.pop()
+                elif action_name == 'fh':
+                    idx = 0 if self.fh_switch.value_selected == 'off' else 1
+                    self.fh_switch.set_active(1 - idx)
+                    self.history_mgr.pop()
                 self.update_mask()
                 self.display()
             else:
@@ -543,7 +561,7 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
                 self.pixel_panel.text(
                     0, 5,
                     'x: {}, y: {}, H: {}, S: {}, V: {}'
-                        .format(p.x, p.y, 2*self.src_hsv[p.y][p.x][0], self.src_hsv[p.y][p.x][1], self.src_hsv[p.y][p.x][2]),
+                        .format(p.x, p.y, 2 * self.src_hsv[p.y][p.x][0], self.src_hsv[p.y][p.x][1], self.src_hsv[p.y][p.x][2]),
                     bbox=dict(
                         linewidth=1,
                         edgecolor='none',
@@ -594,8 +612,10 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             if not rect.is_empty():
                 hmin = int(round(np.rad2deg(rect.left).item())) % 360
                 hmax = int(round(np.rad2deg(rect.right).item()))
+
                 def adjust(val):
                     return min(255, max(0, int(round(255 * val))))
+
                 lower_thresh = [hmin, adjust(rect.top), self.v_range.min]
                 upper_thresh = [hmax, adjust(rect.bottom), self.v_range.max]
                 self.set_sliders(lower_thresh, upper_thresh)

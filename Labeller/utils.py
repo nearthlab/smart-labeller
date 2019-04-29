@@ -229,6 +229,18 @@ def fill_holes(mask):
     return mask | cv2.bitwise_not(flood_filled[1:h + 1, 1:w + 1])
 
 
+def fill_holes_gc(gc_mask):
+    filled = gc_mask.copy()
+    fg = np.where(filled == 1, 255, 0).astype(np.uint8)
+    pfg = np.where(filled == 3, 255, 0).astype(np.uint8)
+    filled_fg = fill_holes(fg)
+    filled_pfg = fill_holes(pfg)
+    filled[filled_fg == 255] = 1
+    filled[filled_pfg == 255] = 3
+
+    return filled
+
+
 class ConnectedComponents:
     def __init__(self, mask: np.ndarray):
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask)
@@ -282,7 +294,7 @@ def filter_by_area(mask: np.ndarray, area_ratio_thresh: float):
                 continue
 
         filtered = np.zeros_like(mask)
-        for i in range(j+1):
+        for i in range(j + 1):
             filtered = np.maximum(filtered, connected_components.mask(i))
 
         return filtered
