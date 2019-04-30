@@ -451,12 +451,12 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
             hsv_pixels = (np.round(hsv_pixels / [3, 8, 1]) * np.array([3, 8, 1])).astype(np.int)
             hsv_pixels = np.unique(hsv_pixels, axis=0)
 
-            theta = hsv_pixels[:, 0] / 179 * np.pi
+            theta = 2*hsv_pixels[:, 0] / 179 * np.pi
             r = hsv_pixels[:, 1] / 255
             v = hsv_pixels[:, 2] / 255
             self.hs_panel.scatter(
                 theta, r,
-                c=colors.hsv_to_rgb(np.clip(np.transpose([theta / np.pi, r, v]), 0, 1)),
+                c=colors.hsv_to_rgb(np.clip(np.transpose([theta / (2 * np.pi), r, v]), 0, 1)),
                 s=30 * r,
                 alpha=0.8
             )

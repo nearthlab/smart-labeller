@@ -9,7 +9,7 @@ from .image_group_viewer import ImageGroupViewer
 from .mask_editor import MaskEditor
 from .partially_labelled_dataset import PartiallyLabelledDataset, ObjectAnnotation, create_rgb_mask
 from .utils import (random_colors, grabcut, ConnectedComponents,
-                    hide_axes_labels, on_caps_lock_off)
+                    hide_axes_labels, on_caps_lock_off, overlay_mask)
 
 
 class LabelHelper(ImageGroupViewer):
@@ -101,6 +101,11 @@ mouse right + dragging: add a new object
                         verticalalignment='top'
                     )
 
+        overlayed = np.copy(self.img)
+        for obj_id, annotation in enumerate(self.annotations):
+            overlay_mask(overlayed, annotation.mask(self.img.shape[:2]), self.obj_pallete[obj_id], 0.3 if obj_id == self.obj_id else 0.1)
+        self.set_image(overlayed)
+
         for obj_id, annotation in enumerate(self.annotations):
             alpha = 0.3 if obj_id == self.obj_id else 0.1
             linewidth = 3 if obj_id == self.obj_id else 1
@@ -111,14 +116,6 @@ mouse right + dragging: add a new object
                 edgecolor=color,
                 facecolor='none'
             ))
-            for poly in annotation.polys:
-                self.add_patch(
-                    poly.to_patch(
-                        self.img.shape[:2],
-                        linewidth=linewidth,
-                        edgecolor=color,
-                        facecolor=(*color, alpha),
-                    ))
             self.patches.append(self.ax.text(
                 *bbox.tl_corner,
                 '{}. {}'.format(obj_id, self.dataset.class_id2name[self.annotations[obj_id].class_id]),
@@ -252,7 +249,10 @@ mouse right + dragging: add a new object
                     if os.path.isfile(label_path):
                         os.remove(label_path)
                     self.dataset.load(self.dataset.root)
-                    self.prev_id = (self.id - 1) % self.num_items
+                    id, prev_id = self.id, (self.id - 1) % self.num_items
+                    self.close()
+                    self.__init__(self.dataset, self.info)
+                    self.id, self.prev_id = id, prev_id
             elif event.key == 'm':
                 class_id = self.ask_class_id()
                 if class_id != -1:
