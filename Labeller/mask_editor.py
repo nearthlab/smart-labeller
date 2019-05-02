@@ -256,12 +256,14 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
                 self.thresh_sliders[self.upper_names[i]].set_active(False)
 
     def run_grabcut(self):
-        gc_mask = grabcut(self.src, cv2.GC_INIT_WITH_MASK, mask=self.gc_mask)
-        self.display()
-        self.history_mgr.add_grabcut_history(self.mask_src)
-        self.mask_src = gc_mask
-        self.update_mask()
-        self.display()
+        try:
+            gc_mask = grabcut(self.src, cv2.GC_INIT_WITH_MASK, mask=self.gc_mask)
+            self.history_mgr.add_grabcut_history(self.mask_src)
+            self.mask_src = gc_mask
+            self.update_mask()
+            self.display()
+        except ValueError as e:
+            self.show_message(str(e), 'Warning')
 
     @property
     def lower_thresh(self):

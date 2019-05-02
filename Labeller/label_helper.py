@@ -152,7 +152,8 @@ mouse right + dragging: add a new object
     def remove_current_object(self):
         if self.obj_id < len(self.annotations):
             del self.annotations[self.obj_id]
-            self.obj_id = max(0, len(self.annotations) - 1)
+            if len(self.annotations) > 0:
+                self.obj_id = (self.obj_id - 1) % len(self.annotations)
 
     def ask_class_id(self):
         return self.ask_multiple_choice_question('Which class does this object belong to?', tuple(self.dataset.class_id2name))
@@ -169,35 +170,68 @@ mouse right + dragging: add a new object
             self.enable_menubar()
 
             if mask is not None:
-                answer = self.ask_multiple_choice_question('Save edited mask as:', ('Overwrite the current object mask', 'Add as a new object', 'Add each component as a new object', 'Do not save'))
-                if answer == 0:
-                    self.annotations[self.obj_id] = ObjectAnnotation(
-                        np.where(mask % 2 == 1, 255, 0).astype('uint8'),
-                        self.annotations[self.obj_id].class_id
+                if np.array_equal(mask % 2, np.zeros_like(mask)):
+                    answer = self.ask_yes_no_question('Would you like to delete the current object?')
+                    if answer:
+                        self.remove_current_object()
+                else:
+                    answer = self.ask_multiple_choice_question(
+                        'Save edited mask as:',
+                        (
+                            'Overwrite the current object mask',
+                            'Add as a new object',
+                            'Add each component as a new object',
+                            'Split current object into two different objects',
+                            'Do not save'
+                        )
                     )
-                elif answer == 1:
-                    class_id = self.ask_class_id()
-                    if class_id != -1:
+                    if answer == 0:
+                        self.annotations[self.obj_id] = ObjectAnnotation(
+                            np.where(mask % 2 == 1, 255, 0).astype(np.uint8),
+                            self.annotations[self.obj_id].class_id
+                        )
+                    elif answer == 1:
+                        class_id = self.ask_class_id()
+                        if class_id != -1:
+                            self.annotations.insert(
+                                self.obj_id + 1,
+                                ObjectAnnotation(
+                                    np.where(mask % 2 == 1, 255, 0).astype(np.uint8),
+                                    class_id
+                                )
+                            )
+                            self.obj_id += 1
+                    elif answer == 2:
+                        class_id = self.ask_class_id()
+                        if class_id != -1:
+                            comps = ConnectedComponents(np.where(mask % 2 == 1, 255, 0).astype(np.uint8))
+                            for i in range(len(comps)):
+                                self.annotations.insert(
+                                    self.obj_id + i + 1,
+                                    ObjectAnnotation(
+                                        comps.mask(i),
+                                        class_id
+                                    )
+                                )
+                    elif answer == 3:
+                        current_mask = self.annotations[self.obj_id].mask(self.img.shape[:2]) // 255
+                        new_mask = np.where(mask % 2 == 1, 1, 0).astype(np.uint8)
+                        class_id = self.annotations[self.obj_id].class_id
+                        self.annotations[self.obj_id] = ObjectAnnotation(
+                            current_mask * (1 - new_mask),
+                            class_id
+                        )
                         self.annotations.insert(
                             self.obj_id + 1,
                             ObjectAnnotation(
-                                np.where(mask % 2 == 1, 255, 0).astype(np.uint8),
+                                new_mask,
                                 class_id
                             )
                         )
                         self.obj_id += 1
-                elif answer == 2:
-                    class_id = self.ask_class_id()
-                    if class_id != -1:
-                        comps = ConnectedComponents(np.where(mask % 2 == 1, 255, 0).astype(np.uint8))
-                        for i in range(len(comps)):
-                            self.annotations.insert(
-                                self.obj_id + i + 1,
-                                ObjectAnnotation(
-                                    comps.mask(i),
-                                    class_id
-                                )
-                            )
+
+
+
         else:
             self.show_message('Please add an object by drawing a rectangle first', 'Guide')
 
@@ -249,10 +283,11 @@ mouse right + dragging: add a new object
                     if os.path.isfile(label_path):
                         os.remove(label_path)
                     self.dataset.load(self.dataset.root)
-                    id, prev_id = self.id, (self.id - 1) % self.num_items
-                    self.close()
-                    self.__init__(self.dataset, self.info)
-                    self.id, self.prev_id = id, prev_id
+                    self.image_menubar.listbox.delete(self.id)
+                    self.image_menubar.listbox.pack()
+                    del self.items[self.id]
+                    self.id = self.id % self.num_items
+                    self.prev_id = (self.id - 1) % self.num_items
             elif event.key == 'm':
                 class_id = self.ask_class_id()
                 if class_id != -1:
@@ -317,18 +352,14 @@ mouse right + dragging: add a new object
                     rect_mask = rect.to_mask(self.img.shape[:2])
 
                     if self.auto_grabcut:
-                        mask = grabcut(self.img, cv2.GC_INIT_WITH_RECT, rect=self.rect_ipr.rect)
-                        # If the initial grabcut fails to find any foreground pixels
-                        # set the mask as the rectangle region itself
-                        if np.array_equal(mask % 2 == 1, np.zeros_like(mask)):
-                            self.annotations.append(ObjectAnnotation(
-                                rect_mask, class_id
-                            ))
-                        else:
-                            self.annotations.append(ObjectAnnotation(
-                                np.where(mask % 2 == 1, 255, 0).astype('uint8'),
-                                class_id
-                            ))
+                        try:
+                            mask = grabcut(self.img, cv2.GC_INIT_WITH_RECT, rect=self.rect_ipr.rect)
+                        except ValueError:
+                            mask = rect_mask
+                        self.annotations.append(ObjectAnnotation(
+                            np.where(mask % 2 == 1, 255, 0).astype('uint8'),
+                            class_id
+                        ))
                     else:
                         self.annotations.append(ObjectAnnotation(
                             rect_mask, class_id

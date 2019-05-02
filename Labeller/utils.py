@@ -69,18 +69,26 @@ def grabcut(img, mode, mask=None, rect=None):
     elif mode == cv2.GC_INIT_WITH_MASK:
         if mask is None:
             raise ValueError('Grabcut initial mask is not provided')
-        elif np.array_equal(mask, np.zeros_like(mask)):
-            raise ValueError('Grabcut initial mask contains no foreground pixels')
+        elif np.array_equal(mask % 2, np.zeros_like(mask)):
+            raise ValueError('Grabcut initial mask contains no foreground pixels. Please mark foreground region manually and try again.')
+        elif np.array_equal(mask % 2, np.ones_like(mask)):
+            raise ValueError('Grabcut initial mask contains no background pixels Please mark background region manually and try again.')
     else:
         raise ValueError('mode must be one of {} but {} is provided'
                          .format([cv2.GC_INIT_WITH_RECT, cv2.GC_INIT_WITH_MASK], mode))
 
     rect = Rectangle() if rect is None else rect
     mask = np.zeros(img.shape[:2], dtype=np.uint8) if mask is None else mask
+    clone = np.copy(mask)
 
     cv2.grabCut(img, mask, tuple(rect), bgdmodel, fgdmodel, 1, mode)
 
-    return mask
+    if np.array_equal(mask % 2, np.zeros_like(mask)):
+        raise ValueError('Grabcut algorithm failed to find any foreground pixel')
+    elif np.array_equal(mask % 2, np.ones_like(mask)):
+        raise ValueError('Grabcut algorithm failed to find any background pixel')
+    else:
+        return mask
 
 
 def random_colors(N, bright=True, seed=4, uint8=False):
@@ -299,5 +307,4 @@ def filter_by_area(mask: np.ndarray, area_ratio_thresh: float):
 
         return filtered
     else:
-        warnings.warn('Couldn\'t find any connected component in the foreground')
-        return np.ones_like(mask)
+        return mask
