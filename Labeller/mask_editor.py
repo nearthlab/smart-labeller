@@ -494,7 +494,7 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         elif event.key == 'ctrl+s':
             self.save_result = len(self.history_mgr) > 0
             self.close()
-        elif event.key == 'ctrl+g':
+        elif event.key == ' ':
             self.run_grabcut()
         elif event.key == 'ctrl+z':
             if len(self.history_mgr) > 0:
@@ -629,9 +629,14 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
 
     def on_scroll(self, event):
         super().on_scroll(event)
-        if event.key is None:
+        if event.inaxes is self.ax and event.key != 'control':
             if event.step == 1:
                 self.brush_iptr.radius += 1
             elif self.brush_iptr.radius > 1:
                 self.brush_iptr.radius -= 1
+            p = self.get_axes_coordinates(event)
+            self.clear_transient_patch()
+            self.add_transient_patch(BrushTouch(
+                p, self.brush_iptr.radius, True, self.brush_iptr.brush
+            ).patch(alpha=0.3))
             self.refresh()

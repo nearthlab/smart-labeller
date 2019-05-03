@@ -300,7 +300,7 @@ mouse right + dragging: add a new object
                     else:
                         first_unlabeled = i
                         break
-                self.prev_id, self.id = self.id, (first_unlabeled - 1) % self.num_items
+                self.prev_id, self.id = self.id, first_unlabeled % self.num_items
 
             self.display()
 
