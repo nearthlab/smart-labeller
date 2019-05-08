@@ -360,7 +360,7 @@ def mask_to_polygons(mask):
         try:
             fpoly = Polygon(contour).simplify(0.5, preserve_topology=False)
         except NotImplementedError as e:
-            warnings.warn('Multi-part geometries do not themselves provide the array interface')
+            warnings.warn('Polygon shape is too complicated. There might be some loss in mask to polygon compression.')
             fpoly = Polygon(contour)
         if not fpoly.degenerate():
             polys.append(Polygon(fpoly.to_ndarray()))

@@ -79,19 +79,20 @@ def grabcut(img, mode, mask=None, rect=None):
 
     rect = Rectangle() if rect is None else rect
     mask = np.zeros(img.shape[:2], dtype=np.uint8) if mask is None else mask
-    clone = np.copy(mask)
 
-    cv2.grabCut(img, mask, tuple(rect), bgdmodel, fgdmodel, 1, mode)
+    try:
+        cv2.grabCut(img, mask, tuple(rect), bgdmodel, fgdmodel, 1, mode)
+        if np.array_equal(mask % 2, np.zeros_like(mask)):
+            raise ValueError('Grabcut algorithm failed to find any foreground pixel')
+        elif np.array_equal(mask % 2, np.ones_like(mask)):
+            raise ValueError('Grabcut algorithm failed to find any background pixel')
+        else:
+            return mask
+    except cv2.error as e:
+        raise ValueError('Grabcut algorithm failed to find any foreground or background pixel (Error message: {})'.format(e))
 
-    if np.array_equal(mask % 2, np.zeros_like(mask)):
-        raise ValueError('Grabcut algorithm failed to find any foreground pixel')
-    elif np.array_equal(mask % 2, np.ones_like(mask)):
-        raise ValueError('Grabcut algorithm failed to find any background pixel')
-    else:
-        return mask
 
-
-def random_colors(N, bright=True, seed=4, uint8=False):
+def random_colors(N, bright=True, seed=1, uint8=False):
     """
     Generate random colors.
     To get visually distinct colors, generate them in HSV space then

@@ -111,8 +111,7 @@ class ScrollableMenubar():
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         self.listbox = tk.Listbox(self.root, yscrollcommand=self.scrollbar.set)
-        for idx, item in enumerate(l):
-            self.listbox.insert(tk.END, '%0{}d: {}'.format(digits, item) % idx)
+        self.fill_listbox(l, digits)
 
         self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.scrollbar.config(command=self.listbox.yview)
@@ -122,6 +121,10 @@ class ScrollableMenubar():
 
     def mainloop(self):
         self.root.mainloop()
+
+    def fill_listbox(self, l, digits):
+        for idx, item in enumerate(l):
+            self.listbox.insert(tk.END, '%0{}d: {}'.format(digits, item) % idx)
 
     def bind(self, on_select):
         if on_select is not None:

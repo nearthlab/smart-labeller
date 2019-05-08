@@ -4,6 +4,8 @@ import os
 import cv2
 import numpy as np
 
+from math import log10
+
 from .drag_interpreter import DragInterpreter
 from .image_group_viewer import ImageGroupViewer
 from .mask_editor import MaskEditor
@@ -217,21 +219,20 @@ mouse right + dragging: add a new object
                         current_mask = self.annotations[self.obj_id].mask(self.img.shape[:2]) // 255
                         new_mask = np.where(mask % 2 == 1, 1, 0).astype(np.uint8)
                         class_id = self.annotations[self.obj_id].class_id
-                        self.annotations[self.obj_id] = ObjectAnnotation(
-                            current_mask * (1 - new_mask),
-                            class_id
-                        )
-                        self.annotations.insert(
-                            self.obj_id + 1,
-                            ObjectAnnotation(
-                                new_mask,
+                        others = current_mask * (1 - new_mask)
+                        if not np.array_equal(others, np.zeros_like(others)):
+                            self.annotations[self.obj_id] = ObjectAnnotation(
+                                others,
                                 class_id
                             )
-                        )
-                        self.obj_id += 1
-
-
-
+                            self.annotations.insert(
+                                self.obj_id + 1,
+                                ObjectAnnotation(
+                                    new_mask,
+                                    class_id
+                                )
+                            )
+                            self.obj_id += 1
         else:
             self.show_message('Please add an object by drawing a rectangle first', 'Guide')
 
@@ -276,16 +277,29 @@ mouse right + dragging: add a new object
                         class_id
                     ))
             elif event.key == 'ctrl+D':
-                answer = self.ask_yes_no_question('Do you want to delete the current image file?')
+                answer = self.ask_yes_no_question('Do you want to delete the current image and label file?')
                 if answer:
+                    # delete image and label files
                     os.remove(self.dataset.image_files[self.id])
                     label_path = self.dataset.infer_label_path(self.id)
                     if os.path.isfile(label_path):
                         os.remove(label_path)
-                    self.dataset.load(self.dataset.root)
-                    self.image_menubar.listbox.delete(self.id)
-                    self.image_menubar.listbox.pack()
+
+                    # clear listbox and remove current item
+                    self.image_menubar.listbox.delete(0, self.num_items - 1)
                     del self.items[self.id]
+
+                    # reload dataset
+                    self.dataset.load(self.dataset.root)
+
+                    # reload listbox
+                    self.image_menubar.fill_listbox(
+                        [os.path.basename(item) for item in self.items],
+                        int(log10(self.num_items)) + 1
+                    )
+                    self.image_menubar.listbox.pack()
+
+                    # reset current and previous id
                     self.id = self.id % self.num_items
                     self.prev_id = (self.id - 1) % self.num_items
             elif event.key == 'm':
@@ -293,14 +307,20 @@ mouse right + dragging: add a new object
                 if class_id != -1:
                     self.annotations[self.obj_id].class_id = class_id
             elif event.key == 'j':
-                first_unlabeled = 0
+                first_unlabeled = -1
                 for i in range(self.num_items):
                     if os.path.isfile(self.dataset.infer_label_path(i)):
                         continue
                     else:
                         first_unlabeled = i
                         break
-                self.prev_id, self.id = self.id, first_unlabeled % self.num_items
+                if first_unlabeled == -1:
+                    self.show_message(
+                        'Every image is labelled',
+                        'Guide'
+                    )
+                else:
+                    self.prev_id, self.id = self.id, first_unlabeled % self.num_items
 
             self.display()
 

@@ -74,7 +74,7 @@ class BrushTouch:
         color = tuple(color)
         return patches.Circle(
             tuple(self.center), self.radius,
-            edgecolor=color if alpha == 1.0 else 'k',
+            edgecolor=color if alpha == 1.0 else 'w',
             facecolor=color if self.solid else 'none',
             linewidth=2
         )

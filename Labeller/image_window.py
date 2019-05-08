@@ -85,7 +85,7 @@ Ctrl + mouse wheel up/down: zoom in/out
 
     def adjust_view(self):
         r = self.roi()
-        r = grow_rect(r, 10)
+        r = grow_rect(r, np.sqrt(r.area()) * 0.04)
         self.ax.set_xlim(
             left=r.left,
             right=r.right + 1

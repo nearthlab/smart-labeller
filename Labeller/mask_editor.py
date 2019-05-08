@@ -632,7 +632,7 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         if event.inaxes is self.ax and event.key != 'control':
             if event.step == 1:
                 self.brush_iptr.radius += 1
-            elif self.brush_iptr.radius > 1:
+            elif self.brush_iptr.radius >= 1:
                 self.brush_iptr.radius -= 1
             p = self.get_axes_coordinates(event)
             self.clear_transient_patch()
