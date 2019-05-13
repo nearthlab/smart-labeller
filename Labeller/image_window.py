@@ -1,5 +1,4 @@
 import tkinter as tk
-from functools import partial
 
 import matplotlib.pyplot as plt
 import numpy as np

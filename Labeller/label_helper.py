@@ -1,17 +1,22 @@
-import json
 import os
+from math import log10
 
 import cv2
 import numpy as np
 
-from math import log10
-
 from .drag_interpreter import DragInterpreter
 from .image_group_viewer import ImageGroupViewer
 from .mask_editor import MaskEditor
-from .partially_labelled_dataset import PartiallyLabelledDataset, ObjectAnnotation, create_rgb_mask
-from .utils import (random_colors, grabcut, ConnectedComponents,
-                    hide_axes_labels, on_caps_lock_off, overlay_mask)
+from .partially_labelled_dataset import (
+    PartiallyLabelledDataset, ObjectAnnotation,
+    create_rgb_mask, save_annotations
+)
+from .utils import (
+    random_colors, grabcut, ConnectedComponents,
+    hide_axes_labels, on_caps_lock_off, overlay_mask
+)
+
+MAX_NUM_OBJECTS = 100
 
 
 class LabelHelper(ImageGroupViewer):
@@ -46,7 +51,7 @@ mouse right + dragging: add a new object
         hide_axes_labels(self.rgb_mask_panel)
 
         self.mode = cv2.GC_INIT_WITH_RECT
-        self.obj_pallete = random_colors(100)
+        self.obj_pallete = random_colors(MAX_NUM_OBJECTS)
         self.cls_pallete = random_colors(self.dataset.num_classes, bright=False, seed=6, uint8=True)
         self.rect_ipr = DragInterpreter()
         self.auto_grabcut = True
@@ -148,8 +153,7 @@ mouse right + dragging: add a new object
             if len(self.annotations) == 0:
                 os.remove(label_path)
             else:
-                with open(label_path, 'w') as fp:
-                    json.dump([annotation.json() for annotation in self.annotations], fp)
+                save_annotations(label_path, self.annotations)
 
     def remove_current_object(self):
         if self.obj_id < len(self.annotations):
@@ -158,7 +162,10 @@ mouse right + dragging: add a new object
                 self.obj_id = (self.obj_id - 1) % len(self.annotations)
 
     def ask_class_id(self):
-        return self.ask_multiple_choice_question('Which class does this object belong to?', tuple(self.dataset.class_id2name))
+        return self.ask_multiple_choice_question(
+            'Which class does this object belong to?',
+            tuple(self.dataset.class_id2name)
+        )
 
     def mask_editor_session(self):
         self.disable_callbacks()
@@ -166,7 +173,11 @@ mouse right + dragging: add a new object
         if self.obj_id < len(self.annotations):
             self.disable_menubar()
             self.iconify()
-            mask_touch_helper = MaskEditor(self.img, self.annotations[self.obj_id].mask(self.img.shape[:2]), win_title=os.path.basename(self.dataset.image_files[self.id]))
+            mask_touch_helper = MaskEditor(
+                self.img,
+                self.annotations[self.obj_id].mask(self.img.shape[:2]),
+                win_title=os.path.basename(self.dataset.image_files[self.id])
+            )
             mask = mask_touch_helper.mainloop()
             self.deiconify()
             self.enable_menubar()

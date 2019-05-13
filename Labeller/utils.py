@@ -1,4 +1,5 @@
 import colorsys
+import os
 import random
 import subprocess
 import warnings
@@ -6,7 +7,20 @@ import warnings
 import cv2
 import numpy as np
 
+from skimage.io import imread
+from skimage.color import gray2rgb
 from .geometry import Point, Rectangle, extract_bbox
+
+
+def load_rgb_image(fname):
+    image = imread(fname)
+    # If grayscale. Convert to RGB for consistency.
+    if image.ndim != 3:
+        image = gray2rgb(image)
+    # If has an alpha channel, remove it for consistency
+    if image.shape[-1] == 4:
+        image = image[..., :3]
+    return image
 
 
 def caps_lock_status():
@@ -309,3 +323,25 @@ def filter_by_area(mask: np.ndarray, area_ratio_thresh: float):
         return filtered
     else:
         return mask
+
+
+def verify_or_create_directory(path):
+    if not os.path.isdir(path):
+        os.mkdir(path)
+    if not os.path.isdir(path):
+        raise Exception('Could not find or create directory {}'.format(path))
+
+def get_files_in_directory_tree(dir, extensions=None, depth=30):
+    if depth >= 0:
+        items = [os.path.join(dir, name) for name in os.listdir(dir)]
+        filenames = filter(os.path.isfile, items)
+        dirnames = filter(os.path.isdir, items)
+        if extensions is not None:
+            filenames = filter(lambda x: sum(map(lambda y: x.endswith(y), extensions)) > 0, filenames)
+        filenames = list(filenames)
+        dirnames = list(dirnames)
+
+        for dirname in dirnames:
+            filenames += get_files_in_directory_tree(dirname, extensions, depth-1)
+
+        return filenames

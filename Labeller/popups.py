@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import filedialog
 from functools import partial
 
 
@@ -141,3 +142,16 @@ class ScrollableMenubar():
     def close(self):
         self.root.quit()
         self.root.destroy()
+
+def ask_directory():
+    window = tk.Tk()
+    window.withdraw()
+    dirname = filedialog.askdirectory(
+        parent=window,
+        initialdir='.',
+        title='Select a dataset root directory'
+    )
+    window.quit()
+    window.destroy()
+
+    return dirname if dirname != () else None

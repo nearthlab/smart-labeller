@@ -94,7 +94,7 @@ class Point:
 
     def __iter__(self):
         for i in self.__data:
-            yield i
+            yield i.item()
 
 
 class Rectangle:
@@ -157,7 +157,7 @@ class Rectangle:
 
     @property
     def left(self):
-        return self.__data[0]
+        return self.__data[0].item()
 
     @left.setter
     def left(self, val):
@@ -165,7 +165,7 @@ class Rectangle:
 
     @property
     def top(self):
-        return self.__data[1]
+        return self.__data[1].item()
 
     @top.setter
     def top(self, val):
@@ -173,7 +173,7 @@ class Rectangle:
 
     @property
     def right(self):
-        return self.__data[2]
+        return self.__data[2].item()
 
     @right.setter
     def right(self, val):
@@ -181,7 +181,7 @@ class Rectangle:
 
     @property
     def bottom(self):
-        return self.__data[3]
+        return self.__data[3].item()
 
     @bottom.setter
     def bottom(self, val):
@@ -272,7 +272,7 @@ class Rectangle:
     def __iter__(self):
         xywh = (self.left, self.top, self.width(), self.height())
         for val in xywh:
-            yield val
+            yield val.item()
 
     def __le__(self, other):
         if self.left < other.left:
@@ -337,6 +337,19 @@ class Polygon(geom.Polygon):
 
     def to_patch(self, shape, *args, **kwargs):
         return patches.Polygon(self.to_ndarray(), shape, *args, **kwargs)
+
+
+def flip_polygon(poly: Polygon, span, orient):
+    assert orient in ['lr', 'ud']
+    xs, ys = poly.get_coordinates()
+    if orient == 'lr':
+        return Polygon([
+            [span - x, y] for x, y in zip(xs, ys)
+        ])
+    else:
+        return Polygon([
+            [x, span - y] for x, y in zip(xs, ys)
+        ])
 
 
 def mask_to_polygons(mask):

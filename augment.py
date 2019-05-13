@@ -1,14 +1,12 @@
-import os
 import sys
-import json
-
+import tkinter as tk
 from tkinter import messagebox
-from Labeller import LabelHelper, PartiallyLabelledDataset
+from Labeller import PartiallyLabelledDataset, AugmentHelper
 from Labeller.popups import ask_directory
 
 if __name__ == '__main__':
     argc = len(sys.argv)
-    dirname = None
+    dirname = ()
     if argc == 1:
         dirname = ask_directory()
     elif argc == 2:
@@ -21,19 +19,17 @@ if __name__ == '__main__':
         if dirname is not None:
             # Load parially labelled dataset
             dataset = PartiallyLabelledDataset()
-            dataset.load(dirname)
-
-            # Load info.json if it is found under the dataset root directory
-            info_path = os.path.join(dirname, 'info.json')
-            if os.path.isfile(info_path):
-                with open(info_path, 'r') as fp:
-                    info = json.load(fp)
-            else:
-                info = None
+            dataset.load(dirname, labelled_only=True)
 
             # Create label helper
-            helper = LabelHelper(dataset, info)
-            helper.mainloop()
+            helper = AugmentHelper(dataset)
+            result = helper.mainloop()
+
+            # Notify user
+            if result is not None:
+                messagebox.showinfo(
+                    'Finished!', 'The augmented dataset is saved at {}'.format(result)
+                )
 
     except Exception as e:
         messagebox.showerror('Failure', e)

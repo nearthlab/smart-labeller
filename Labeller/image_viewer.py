@@ -1,8 +1,7 @@
 import os
 
-from skimage.io import imread
 from .image_group_viewer import ImageGroupViewer
-from .utils import on_caps_lock_off
+from .utils import on_caps_lock_off, load_rgb_image
 
 
 class ImageViewer(ImageGroupViewer):
@@ -20,7 +19,7 @@ class ImageViewer(ImageGroupViewer):
         super(ImageViewer, self).display()
         if self.should_update():
             image_file = self.items[self.id]
-            img = imread(image_file)
+            img = load_rgb_image(image_file)
             self.set_image(img)
 
             title = "{} ({}/{})".format(
