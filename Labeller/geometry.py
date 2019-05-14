@@ -272,7 +272,7 @@ class Rectangle:
     def __iter__(self):
         xywh = (self.left, self.top, self.width(), self.height())
         for val in xywh:
-            yield val.item()
+            yield val
 
     def __le__(self, other):
         if self.left < other.left:
