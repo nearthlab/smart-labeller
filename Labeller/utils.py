@@ -1,5 +1,7 @@
 import colorsys
 import os
+import ctypes
+import platform
 import random
 import subprocess
 import warnings
@@ -24,9 +26,18 @@ def load_rgb_image(fname):
 
 
 def caps_lock_status():
-    # Check if caps lock is on
-    result = str(subprocess.check_output('xset -q | grep Caps', shell=True))
-    return 'on' in result[result.find('00:'):result.find('01:')]
+    system = platform.system()
+    if system == 'Linux':
+        # Check if caps lock is on
+        result = str(subprocess.check_output('xset -q | grep Caps', shell=True))
+        return 'on' in result[result.find('00:'):result.find('01:')]
+    elif system == 'Windows':
+        hllDll = ctypes.WinDLL("User32.dll")
+        VK_CAPITAL = 0x14
+        return hllDll.GetKeyState(VK_CAPITAL) & 0xffff
+    else:
+        warnings.warn('Caps lock safety on your platform ({}) is not implemented yet.'.format(system))
+        return False
 
 
 def on_caps_lock_off(func):
