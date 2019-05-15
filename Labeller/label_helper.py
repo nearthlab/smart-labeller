@@ -24,9 +24,16 @@ class LabelHelper(ImageGroupViewer):
 <Object Actions>
 w or up arrow: select the next object
 s or down arrow: select the previous object
+Shift + w or Shift + up arrow: swap current object with the next object
+Shift + s or Shift + down arrow: swap current object with the previous object
 Ctrl + e: edit the current object mask
+Ctrl + a: add a bounding box enclosing entire image
 Ctrl + d: delete the current object
-mouse right + dragging: add a new object
+Ctrl + Shift + d: delete the current image and label files
+j: jump to the first image with no label file
+m: rename current object
+mouse right + dragging: add a new object with grabcut
+Shift + mouse right + dragging: add a new object without grabcut
     '''
 
     def __init__(self, dataset: PartiallyLabelledDataset, info=None):
@@ -143,8 +150,8 @@ mouse right + dragging: add a new object
         )
 
     def on_image_menubar_select(self, event):
-        super().on_image_menubar_select(event)
         self.save_current_labels()
+        super().on_image_menubar_select(event)
 
     def save_current_labels(self):
         prev_annotations = self.dataset.load_annotations(self.id)

@@ -108,7 +108,9 @@ w/s: change brush type (current brush type is shown on the upper panel)
 Ctrl + g: run grabcut with current mask
 
 <Threshold Actions>
-Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
+Drag sliders at the bottom: adjust thresholds for H, S, V channel pixel values
+Double click on HSV panel: reset threshold values
+q/e: switch to previous/next HSV panel view
     '''
 
     def __init__(self, img: np.ndarray, mask: np.ndarray, win_title=None):

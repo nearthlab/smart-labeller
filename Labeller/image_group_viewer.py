@@ -13,6 +13,8 @@ class ImageGroupViewer(ImageWindow, metaclass=ABCMeta):
 <Group View Actions>
 a or left arrow: go to the previous image
 d or right arrow: go to the next image
+Home: go to the first image
+End: go to the last image
     '''
 
     def __init__(self, items: list, win_title=None, axes_pos=ImageWindow.DEFAULT_AXES_POSITION):
