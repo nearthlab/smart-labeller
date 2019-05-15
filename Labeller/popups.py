@@ -9,7 +9,7 @@ def get_width_height(msg):
     # fit width to the longest line length
     width = 40 + 8 * longest_line_length
     # fit height to the number of lines
-    height = 40 + 14 * num_lines
+    height = 50 + 14 * num_lines
 
     return width, height
 
@@ -32,6 +32,7 @@ class MessageBox:
         self.root.bind('<Return>', lambda x: self.close())
         self.root.bind('<Escape>', lambda x: self.close())
         self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.root.focus_force()
 
     def close(self):
         self.root.quit()
@@ -71,6 +72,7 @@ class MultipleChoiceQuestionAsker:
         self.root.bind('<Return>', lambda x: self.close())
         self.root.bind('<Escape>', lambda x: self.quit())
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
+        self.root.focus_force()
 
     def set_value(self, v):
         self.value = v
@@ -109,6 +111,7 @@ class YesNoQuestionAsker:
         self.root.bind('<Return>', lambda x: self.set_value(True))
         self.root.bind('<Escape>', lambda x: self.set_value(False))
         self.root.protocol("WM_DELETE_WINDOW", partial(self.set_value, v=False))
+        self.root.focus_force()
 
     def set_value(self, v):
         self.value = v
@@ -134,7 +137,7 @@ class ScrollableMenubar():
         self.scrollbar.config(command=self.listbox.yview)
 
         self.root.protocol("WM_DELETE_WINDOW", lambda: None)
-        self.root.grab_set()
+        self.root.lift()
 
     def mainloop(self):
         self.root.mainloop()
@@ -171,4 +174,4 @@ def ask_directory():
     window.quit()
     window.destroy()
 
-    return dirname if dirname != () else None
+    return dirname if dirname != () and dirname != '' else None

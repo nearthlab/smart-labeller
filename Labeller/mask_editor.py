@@ -236,6 +236,7 @@ Use sliders on the bottom to adjust thresholds for H, S, V channel pixel values
         self.plot_hs_range()
         self.plot_thresh_regions()
         self.display()
+        self.root.focus_force()
 
     def mainloop(self):
         super().mainloop()
