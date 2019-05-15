@@ -2,22 +2,27 @@ import tkinter as tk
 from tkinter import filedialog
 from functools import partial
 
+def get_width_height(msg):
+    line_lengths = list(map(len, msg.splitlines()))
+    longest_line_length = max(line_lengths)
+    num_lines = len(line_lengths)
+    # fit width to the longest line length
+    width = 40 + 8 * longest_line_length
+    # fit height to the number of lines
+    height = 40 + 14 * num_lines
+
+    return width, height
 
 class MessageBox:
-    def __init__(self, msg, cx, cy, title):
+    def __init__(self, msg, title, cx=None, cy=None):
         self.root = tk.Tk()
         self.root.title(title)
 
-        line_lengths = list(map(len, msg.splitlines()))
-        longest_line_length = max(line_lengths)
-        num_lines = len(line_lengths)
-        # fit width to the longest line length
-        width = 40 + 8 * longest_line_length
-        # fit height to the number of lines
-        height = 40 + 14 * num_lines
+        width, height = get_width_height(msg)
+        cx = cx or self.root.winfo_screenwidth() // 2
+        cy = cy or self.root.winfo_screenheight() // 2
         self.root.geometry('{}x{}+{}+{}'.format(
             width, height,
-            # popup at the center of the screen
             cx - width // 2, cy - height // 2
         ))
 
@@ -38,12 +43,16 @@ class MessageBox:
 
 class MultipleChoiceQuestionAsker:
     def __init__(self, prompt: str, options: tuple,
-                 cx, cy,
-                 title='Options', width=300, height=150):
+                 title='Choices', cx=None, cy=None):
         self.root = tk.Tk()
         self.root.title(title)
+        width = 300
+        height = 20 + 60 * len(options)
+        cx = cx or self.root.winfo_screenwidth() // 2
+        cy = cy or self.root.winfo_screenheight() // 2
         self.root.geometry('{}x{}+{}+{}'.format(
-            width, height, cx - width // 2, cy - height // 2
+            width, height,
+            cx - width // 2, cy - height // 2
         ))
         self.value = 0
 
@@ -80,10 +89,17 @@ class MultipleChoiceQuestionAsker:
 
 
 class YesNoQuestionAsker:
-    def __init__(self, prompt: str, cx, cy, title='Options', width=200, height=100):
+    def __init__(self, prompt: str, title='Options', cx=None, cy=None):
         self.root = tk.Tk()
         self.root.title(title)
-        self.root.geometry('{}x{}+{}+{}'.format(width, height, cx - width // 2, cy - height // 2))
+        width, height = get_width_height(prompt)
+        height += 40
+        cx = cx or self.root.winfo_screenwidth() // 2
+        cy = cy or self.root.winfo_screenheight() // 2
+        self.root.geometry('{}x{}+{}+{}'.format(
+            width, height,
+            cx - width // 2, cy - height // 2
+        ))
         self.value = None
 
         tk.Label(self.root, text=prompt, wraplength=4 * width // 5).pack()
@@ -142,6 +158,7 @@ class ScrollableMenubar():
     def close(self):
         self.root.quit()
         self.root.destroy()
+
 
 def ask_directory():
     window = tk.Tk()

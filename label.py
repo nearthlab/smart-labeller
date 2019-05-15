@@ -2,9 +2,8 @@ import os
 import sys
 import json
 
-from tkinter import messagebox
 from Labeller import LabelHelper, PartiallyLabelledDataset
-from Labeller.popups import ask_directory
+from Labeller.popups import ask_directory, MessageBox
 
 if __name__ == '__main__':
     argc = len(sys.argv)
@@ -36,4 +35,5 @@ if __name__ == '__main__':
             helper.mainloop()
 
     except Exception as e:
-        messagebox.showerror('Failure', e)
+        win = MessageBox(str(e), 'Failure')
+        win.mainloop()

@@ -1,8 +1,7 @@
 import sys
-import tkinter as tk
-from tkinter import messagebox
+
 from Labeller import PartiallyLabelledDataset, AugmentHelper
-from Labeller.popups import ask_directory
+from Labeller.popups import ask_directory, MessageBox
 
 if __name__ == '__main__':
     argc = len(sys.argv)
@@ -27,9 +26,12 @@ if __name__ == '__main__':
 
             # Notify user
             if result is not None:
-                messagebox.showinfo(
-                    'Finished!', 'The augmented dataset is saved at {}'.format(result)
+                win = MessageBox(
+                    'The augmented dataset is saved at {}'.format(result),
+                    'Finished!'
                 )
+                win.mainloop()
 
     except Exception as e:
-        messagebox.showerror('Failure', e)
+        win = MessageBox(str(e), 'Failure')
+        win.mainloop()

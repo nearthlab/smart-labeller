@@ -291,7 +291,7 @@ Ctrl + mouse wheel up/down: zoom in/out
     def ask_multiple_choice_question(self, question: str, options: tuple):
         self.disable_callbacks()
         asker = MultipleChoiceQuestionAsker(
-            question, options,
+            question, options, 'Choices',
             *self.window_center
         )
         answer = asker.mainloop()
@@ -301,7 +301,7 @@ Ctrl + mouse wheel up/down: zoom in/out
 
     def ask_yes_no_question(self, question: str):
         self.disable_callbacks()
-        asker = YesNoQuestionAsker(question, *self.window_center)
+        asker = YesNoQuestionAsker(question, 'Options', *self.window_center)
         answer = asker.mainloop()
         self.enable_callbacks()
 
@@ -309,7 +309,7 @@ Ctrl + mouse wheel up/down: zoom in/out
 
     def show_message(self, msg, title):
         self.disable_callbacks()
-        notifier = MessageBox(msg, *self.window_center, title)
+        notifier = MessageBox(msg, title, *self.window_center)
         notifier.mainloop()
         self.enable_callbacks()
 
