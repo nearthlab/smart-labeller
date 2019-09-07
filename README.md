@@ -3,7 +3,7 @@ Labelling tool for creating custom datasets for object detection and semantic / 
 Intended to make labelling segmentation mask easier for abstract objects (e.g. cracks or erosion on surfaces) using algorithms such as  [GrabCut](https://docs.opencv.org/3.4/d8/d83/tutorial_py_grabcut.html) and image thresholding.
 
 ![demo](./defect-labeller-demo.gif)
-<br/>Labelling defects on wind turbines' blade images using this repository
+<br/>Example usage: labelling defects on a wind turbine's blade surface using this repository
 
 # Installation
 ``` bash
