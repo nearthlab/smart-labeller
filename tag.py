@@ -25,5 +25,7 @@ if __name__ == '__main__':
             helper.mainloop()
 
     except Exception as e:
+        with open('{}.error.log'.format(sys.argv[0]), 'a') as fp:
+            fp.write(str(e))
         win = MessageBox(str(e), 'Failure')
         win.mainloop()

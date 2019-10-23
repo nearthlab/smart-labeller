@@ -17,7 +17,10 @@ Home: go to the first image
 End: go to the last image
     '''
 
-    def __init__(self, items: list, win_title=None, axes_pos=ImageWindow.DEFAULT_AXES_POSITION):
+    def __init__(self,
+                 items: list, win_title=None,
+                 axes_pos=ImageWindow.DEFAULT_AXES_POSITION,
+                 menubar_kwargs=None):
         super().__init__(win_title, axes_pos)
         self.items = items
         self.id = 0
@@ -27,10 +30,12 @@ End: go to the last image
         height = self.root.winfo_height()
         x = self.root.winfo_x() + self.root.winfo_width()
         y = 0
+        menubar_kwargs = menubar_kwargs or {}
         self.image_menubar = ScrollableMenubar(
             [os.path.basename(item) for item in self.items],
             width, height, x, y,
-            int(log10(self.num_items)) + 1
+            int(log10(self.num_items)) + 1,
+            listbox_kwargs=menubar_kwargs
         )
         self.image_menubar.set_title('Image List')
         self.enable_menubar()

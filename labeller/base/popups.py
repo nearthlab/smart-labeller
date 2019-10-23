@@ -126,13 +126,21 @@ class YesNoQuestionAsker:
 
 
 class ScrollableMenubar():
-    def __init__(self, l: list, width, height, x, y, digits=4):
+    def __init__(self,
+                 l: list, width, height,
+                 x, y, digits=4,
+                 listbox_kwargs=None):
         self.root = tk.Tk()
         self.root.geometry('{}x{}+{}+{}'.format(width, height, x, y))
         self.scrollbar = tk.Scrollbar(self.root)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self.listbox = tk.Listbox(self.root, yscrollcommand=self.scrollbar.set)
+        listbox_kwargs = listbox_kwargs or {}
+        self.listbox = tk.Listbox(
+            self.root,
+            yscrollcommand=self.scrollbar.set,
+            **listbox_kwargs
+        )
         self.fill_listbox(l, digits)
 
         self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)

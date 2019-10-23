@@ -165,6 +165,9 @@ class TagHelper(ImageGroupViewer):
     INACTIVE_AXES_COLOR = 'lightyellow'
     INTERMED_AXES_COLOR = 'greenyellow'
     ACTIVE_AXES_COLOR = 'limegreen'
+    INACTIVE_TKINTER_COLOR = 'light yellow'
+    INTERMED_TKINTER_COLOR = 'green yellow'
+    ACTIVE_TKINTER_COLOR = 'lime green'
 
     INACTIVE_COLOR = 'darkgray'
     ACTIVE_COLOR = 'limegreen'
@@ -192,8 +195,11 @@ class TagHelper(ImageGroupViewer):
                     if x.lower().endswith('.jpg') or x.lower().endswith('.png') or x.lower().endswith('.bmp')
                     ]),
             os.path.basename(cat_path),
-            axes_pos=(0.05, 0.05, 0.6, 0.9)
+            axes_pos=(0.05, 0.05, 0.6, 0.9),
+            menubar_kwargs={'selectbackground': 'light sky blue'}
         )
+
+        self.image_menubar.listbox.pack()
         hide_axes_labels(self.ax)
         self.ax.set_facecolor(TagHelper.INACTIVE_AXES_COLOR)
         self.set_title(os.path.basename(self.root_dir))
@@ -227,6 +233,14 @@ class TagHelper(ImageGroupViewer):
 
         # category of the panels from the top to the bottom
         self.ordered_categories = list(reversed(cat_names))
+
+        # mark progress of the items
+        for id in range(self.num_items):
+            num = self.num_completed_categories(id)
+            color = TagHelper.INACTIVE_TKINTER_COLOR if num == 0 else \
+                TagHelper.INTERMED_TKINTER_COLOR if num < len(self.categories) else \
+                    TagHelper.ACTIVE_TKINTER_COLOR
+            self.image_menubar.listbox.itemconfig(id, bg=color)
 
         self.clipboard = dict()
         self.history = dict()
@@ -262,29 +276,33 @@ class TagHelper(ImageGroupViewer):
 
     @property
     def image_name(self):
-        return os.path.split(self.items[self.id])[1]
+        return self.get_image_name(self.id)
+
+    def get_image_name(self, id):
+        return os.path.split(self.items[id])[1]
 
     @property
     def tag_name(self):
-        name, ext = os.path.splitext(self.image_name)
+        return self.get_tag_name(self.id)
+
+    def get_tag_name(self, id):
+        name, ext = os.path.splitext(self.get_image_name(id))
         return '{}.json'.format(name)
 
-    def is_completed(self, id):
-        image_name = os.path.split(self.items[id])[1]
-        name, ext = os.path.splitext(image_name)
-        tag_name = '{}.json'.format(name)
-        tag_path = os.path.join(self.tags_dir, tag_name)
+    def num_completed_categories(self, id):
+        num = 0
+        tag = self.load_annotation(id).get('tag')
+        for value in tag.values():
+            if value != TagHelper.NOT_SPECIFIED_VALUE:
+                num += 1
+        return num
 
-        try:
-            with open(tag_path, 'r') as fp:
-                annotation = json.load(fp)
-                tag = annotation.get('tag')
-                for value in tag.values():
-                    if value == '':
-                        return False
-                return True
-        except:
-            return False
+    def is_completed(self, id):
+        tag = self.load_annotation(id).get('tag')
+        for value in tag.values():
+            if value == TagHelper.NOT_SPECIFIED_VALUE:
+                return False
+        return True
 
     def syncronize_axes(self):
         isSpecified = []
@@ -310,10 +328,14 @@ class TagHelper(ImageGroupViewer):
         numSpecified = sum(isSpecified)
         if numSpecified == 0:
             self.ax.set_facecolor(TagHelper.INACTIVE_AXES_COLOR)
+            self.image_menubar.listbox.itemconfig(self.id, bg=TagHelper.INACTIVE_TKINTER_COLOR)
         elif numSpecified < len(self.categories):
             self.ax.set_facecolor(TagHelper.INTERMED_AXES_COLOR)
+            self.image_menubar.listbox.itemconfig(self.id, bg=TagHelper.INTERMED_TKINTER_COLOR)
         else:
             self.ax.set_facecolor(TagHelper.ACTIVE_AXES_COLOR)
+            self.image_menubar.listbox.itemconfig(self.id, bg=TagHelper.ACTIVE_TKINTER_COLOR)
+        self.image_menubar.listbox.pack()
 
         for idx, category in enumerate(self.ordered_categories):
             color = 'crimson' if self.focused_dialog_id == idx else 'none'
@@ -357,17 +379,26 @@ class TagHelper(ImageGroupViewer):
             buttons.set_active(index)
         self.syncronize_axes()
 
-    @property
-    def saved_annotation(self):
+    def load_annotation(self, id):
         '''
-        :return: annotation written on the disk if annotation file is found, otherwise default annotation
+        :param id: item id
+        :return: annotation with the given id written on the disk if annotation file is found,
+                otherwise default annotation
         '''
         try:
-            with open(os.path.join(self.tags_dir, self.tag_name), 'r') as fp:
+            with open(os.path.join(self.tags_dir, self.get_tag_name(id)), 'r') as fp:
                 ann = json.load(fp)
         except:
             ann = self.default_annotation
         return ann
+
+    @property
+    def saved_annotation(self):
+        '''
+        :return: annotation with the current id written on the disk if annotation file is found,
+                otherwise default annotation
+        '''
+        return self.load_annotation(self.id)
 
     @saved_annotation.setter
     def saved_annotation(self, annotation):
@@ -461,7 +492,7 @@ class TagHelper(ImageGroupViewer):
                 self.annotation = annotation
             elif event.key == 'ctrl+f':
                 for id in range(self.num_items):
-                    if not self.is_completed(id):
+                    if self.num_completed_categories(id) < len(self.categories):
                         if id == self.id:
                             self.show_message('이미 완료되지 않은 가장 첫 번째 이미지를 보고 있습니다.', 'Info')
                             return
