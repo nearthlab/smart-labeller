@@ -178,6 +178,7 @@ def ask_directory(title):
 
     return dirname if dirname != () and dirname != '' else None
 
+
 def ask_file(title, filetypes=None):
     '''
     :param title:

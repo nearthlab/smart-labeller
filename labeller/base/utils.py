@@ -1,6 +1,6 @@
 import colorsys
-import os
 import ctypes
+import os
 import platform
 import random
 import subprocess
@@ -8,9 +8,9 @@ import warnings
 
 import cv2
 import numpy as np
-
-from skimage.io import imread
 from skimage.color import gray2rgb
+from skimage.io import imread
+
 from .geometry import Point, Rectangle, extract_bbox
 
 
@@ -342,6 +342,7 @@ def verify_or_create_directory(path):
     if not os.path.isdir(path):
         raise Exception('Could not find or create directory {}'.format(path))
 
+
 def get_files_in_directory_tree(dir, extensions=None, depth=30):
     if depth >= 0:
         items = [os.path.join(dir, name) for name in os.listdir(dir)]
@@ -353,6 +354,6 @@ def get_files_in_directory_tree(dir, extensions=None, depth=30):
         dirnames = list(dirnames)
 
         for dirname in dirnames:
-            filenames += get_files_in_directory_tree(dirname, extensions, depth-1)
+            filenames += get_files_in_directory_tree(dirname, extensions, depth - 1)
 
         return filenames
