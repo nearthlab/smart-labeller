@@ -37,10 +37,20 @@ End: go to the last image
         self.force_focus()
 
     def enable_menubar(self):
-        self.image_menubar.bind(self.on_image_menubar_select)
+        if hasattr(self, 'image_menubar'):
+            self.image_menubar.bind(self.on_image_menubar_select)
 
     def disable_menubar(self):
-        self.image_menubar.unbind()
+        if hasattr(self, 'image_menubar'):
+            self.image_menubar.unbind()
+
+    def enable_callbacks(self):
+        super(ImageGroupViewer, self).enable_callbacks()
+        self.enable_menubar()
+
+    def disable_callbacks(self):
+        super(ImageGroupViewer, self).disable_callbacks()
+        self.disable_menubar()
 
     @property
     def num_items(self):

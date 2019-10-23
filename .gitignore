@@ -4,3 +4,4 @@ playground.py
 **/build/*
 **/*.spec
 **/dist/*
+clean_pyinstaller_outputs.sh

@@ -138,8 +138,29 @@ def set_border_color(ax, color):
 
 class TagHelper(ImageGroupViewer):
     '''
-    asdf
-    가나다라
+    [이미지 이동]
+    오른쪽 이미지 리스트에서 파일 이름을 직접 선택하거나
+    다음 단축키들을 이용하여 이동할 수 있습니다.
+    방향키 →, d: 다음 이미지로 넘기기
+    방향키 ←, a: 이전 이미지로 넘기기
+    Home: 첫 번째 이미지로 이동
+    End: 마지막 이미지로 이동
+    Ctrl + F: 레이블이 완료되지 않은 가장 첫 번째 이미지를 찾아서 이동
+
+    [레이블 변경]
+    각각의 박스 안에 있는 레이블을 직접 클릭하거나
+    다음 단축키들을 이용하여 레이블을 변경시킬 수 있습니다.
+    방향키 ↑, w: 위쪽 박스로 이동
+    방향키 ↓, s: 아래쪽 박스로 이동
+    Pgup: 선택된 레이블을 위로 옮깁니다.
+    Pgdn: 선택된 레이블을 아래로 옮깁니다.
+    BackSpace, Delete: 현재 레이블을 모두 초기화
+
+    [그 외 기능]
+    Esc: 저장 후 종료
+    Ctrl + C: 현재 레이블을 복사하기
+    Ctrl + V: 복사해둔 레이블 붙여넣기
+    Ctrl + BackSpace, Ctrl + Delete: 현재 이미지를 제외하기
     '''
     INACTIVE_AXES_COLOR = 'lightyellow'
     INTERMED_AXES_COLOR = 'greenyellow'
@@ -387,6 +408,19 @@ class TagHelper(ImageGroupViewer):
     def on_leave_axes(self, event):
         pass
 
+    def enable_callbacks(self):
+        super(TagHelper, self).enable_callbacks()
+        if hasattr(self, 'dialogs'):
+            for dialog in self.dialogs.values():
+                buttons = dialog.get('buttons')
+                buttons.connect_event('button_press_event', buttons._clicked)
+
+    def disable_callbacks(self):
+        super(TagHelper, self).disable_callbacks()
+        if hasattr(self, 'dialogs'):
+            for dialog in self.dialogs.values():
+                dialog.get('buttons').disconnect_events()
+
     def display(self):
         super(TagHelper, self).display()
         if self.should_update():
@@ -400,7 +434,6 @@ class TagHelper(ImageGroupViewer):
                 self.num_items
             )
             self.ax.set_title(title)
-
             self.annotation = self.saved_annotation
 
     def on_image_menubar_select(self, event):
@@ -437,19 +470,19 @@ class TagHelper(ImageGroupViewer):
                             self.display()
                             return
                 self.show_message('모든 이미지의 레이블링이 완료된 상태입니다!', 'Info')
-            elif event.key in ['up', 'down', 's', 'w']:
+            elif event.key in ['pageup', 'pagedown']:
                 annotation = self.annotation
                 category = self.ordered_categories[self.focused_dialog_id]
                 options = [TagHelper.NOT_SPECIFIED_VALUE] + self.categories.get(category)
                 value = annotation.get('tag').get(category)
                 option_id = options.index(value)
-                option_id = (option_id + 1) % len(options) if event.key in ['down', 's'] else (option_id - 1) % len(options)
+                option_id = (option_id + 1) % len(options) if event.key == 'pagedown' else (option_id - 1) % len(options)
                 annotation['tag'][category] = options[option_id]
                 self.annotation = annotation
-            elif event.key == 'enter':
+            elif event.key in ['down', 's']:
                 self.focused_dialog_id = (self.focused_dialog_id + 1) % len(self.dialogs)
                 self.syncronize_axes()
-            elif event.key == 'ctrl+enter':
+            elif event.key in ['up', 'w']:
                 self.focused_dialog_id = (self.focused_dialog_id - 1) % len(self.dialogs)
                 self.syncronize_axes()
             elif event.key in ['ctrl+delete', 'ctrl+backspace']:
