@@ -1,7 +1,8 @@
 import os
 
-from .image_group_viewer import ImageGroupViewer
-from .utils import on_caps_lock_off, load_rgb_image
+from ..base import (
+    ImageGroupViewer, on_caps_lock_off, load_rgb_image
+)
 
 
 class ImageViewer(ImageGroupViewer):

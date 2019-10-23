@@ -1,8 +1,8 @@
+import warnings
+
 import cv2
 import numpy as np
 import shapely.geometry as geom
-import warnings
-
 from matplotlib import patches as patches
 from skimage import measure
 

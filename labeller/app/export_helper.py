@@ -9,12 +9,13 @@ from tkinter import ttk
 
 from skimage.io import imsave
 
-from .geometry import get_rect
 from .partially_labelled_dataset import (
     PartiallyLabelledDataset, create_rgb_mask,
     create_class_mask, create_instance_mask
 )
-from .utils import verify_or_create_directory, random_colors
+from ..base import (
+    get_rect, verify_or_create_directory, random_colors
+)
 
 
 class ExportType(enum.Enum):

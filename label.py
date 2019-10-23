@@ -1,15 +1,17 @@
+import json
 import os
 import sys
-import json
 
-from Labeller import LabelHelper, PartiallyLabelledDataset
-from Labeller.popups import ask_directory, MessageBox
+from labeller import (
+    LabelHelper, PartiallyLabelledDataset,
+    ask_directory, MessageBox
+)
 
 if __name__ == '__main__':
     argc = len(sys.argv)
     dirname = None
     if argc == 1:
-        dirname = ask_directory()
+        dirname = ask_directory('Select a dataset root directory')
     elif argc == 2:
         dirname = sys.argv[1]
     else:

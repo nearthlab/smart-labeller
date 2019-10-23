@@ -10,13 +10,13 @@ import numpy as np
 from skimage.io import imsave
 from skimage.transform import resize
 
-from .geometry import get_rect, Rectangle
 from .partially_labelled_dataset import (
     PartiallyLabelledDataset,
     save_annotations,
     flip_annotations
 )
-from .utils import (
+from ..base import (
+    get_rect, Rectangle,
     verify_or_create_directory,
     get_files_in_directory_tree,
     load_rgb_image

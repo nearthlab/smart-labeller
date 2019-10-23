@@ -1,3 +1,7 @@
 **/__pycache__/*
 playground.py
 **/*.json
+**/build/*
+**/*.spec
+**/dist/*
+clean_pyinstaller_outputs.sh
