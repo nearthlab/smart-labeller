@@ -1,13 +1,15 @@
 import sys
 
-from Labeller import PartiallyLabelledDataset, ExportHelper
-from Labeller.popups import ask_directory, MessageBox
+from labeller import (
+    ExportHelper, PartiallyLabelledDataset,
+    ask_directory, MessageBox
+)
 
 if __name__ == '__main__':
     argc = len(sys.argv)
     dirname = ()
     if argc == 1:
-        dirname = ask_directory()
+        dirname = ask_directory('Select a dataset root directory')
     elif argc == 2:
         dirname = sys.argv[1]
     else:

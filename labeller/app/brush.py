@@ -5,8 +5,7 @@ import cv2
 import numpy as np
 from matplotlib import patches as patches
 
-from Labeller.drag_interpreter import DragInterpreterBase
-from Labeller.geometry import Point
+from ..base import Point, DragInterpreterBase
 
 
 class BrushType(enum.Enum):

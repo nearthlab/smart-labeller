@@ -1,8 +1,8 @@
 import os
 import tkinter as tk
-
 from abc import *
 from math import log10
+
 from .image_window import ImageWindow
 from .popups import ScrollableMenubar
 from .utils import on_caps_lock_off
@@ -73,12 +73,26 @@ End: go to the last image
         super().close()
         self.image_menubar.close()
 
+    def remove_current_item(self):
+        # clear listbox and remove current item
+        self.image_menubar.listbox.delete(0, self.num_items - 1)
+        del self.items[self.id]
+
+        # reload listbox
+        self.image_menubar.fill_listbox(
+            [os.path.basename(item) for item in self.items],
+            int(log10(self.num_items)) + 1
+        )
+        self.image_menubar.listbox.pack()
+
+        self.id = self.id % self.num_items
+        self.prev_id = (self.id - 1) % self.num_items
+
     @abstractmethod
     def display(self):
         try:
             self.image_menubar.listbox.selection_clear(0, self.num_items - 1)
             self.image_menubar.listbox.select_set(self.id, self.id)
-            self.image_menubar.listbox.yview_moveto(self.id / self.num_items)
         # tk.TclError is raised when either of selection_clear or select_set
         # is called when the image menubar is already closed
         except tk.TclError as e:

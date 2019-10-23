@@ -4,14 +4,13 @@ from math import log10
 import cv2
 import numpy as np
 
-from .drag_interpreter import DragInterpreter
-from .image_group_viewer import ImageGroupViewer
 from .mask_editor import MaskEditor
 from .partially_labelled_dataset import (
     PartiallyLabelledDataset, ObjectAnnotation,
     create_rgb_mask, save_annotations
 )
-from .utils import (
+from ..base import (
+    DragInterpreter, ImageGroupViewer,
     random_colors, grabcut, ConnectedComponents,
     hide_axes_labels, on_caps_lock_off, overlay_mask
 )
@@ -302,24 +301,8 @@ Shift + mouse right + dragging: add a new object without grabcut
                     label_path = self.dataset.infer_label_path(self.id)
                     if os.path.isfile(label_path):
                         os.remove(label_path)
-
-                    # clear listbox and remove current item
-                    self.image_menubar.listbox.delete(0, self.num_items - 1)
-                    del self.items[self.id]
-
-                    # reload dataset
                     self.dataset.load(self.dataset.root)
-
-                    # reload listbox
-                    self.image_menubar.fill_listbox(
-                        [os.path.basename(item) for item in self.items],
-                        int(log10(self.num_items)) + 1
-                    )
-                    self.image_menubar.listbox.pack()
-
-                    # reset current and previous id
-                    self.id = self.id % self.num_items
-                    self.prev_id = (self.id - 1) % self.num_items
+                    self.remove_current_item()
             elif event.key == 'm':
                 class_id = self.ask_class_id()
                 if class_id != -1:

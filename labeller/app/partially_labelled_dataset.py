@@ -5,8 +5,8 @@ import random
 
 import numpy as np
 
-from .utils import verify_or_create_directory, load_rgb_image
-from .geometry import (
+from ..base import (
+    verify_or_create_directory, load_rgb_image,
     polygons_to_mask, mask_to_polygons,
     flip_polygon, Polygon, extract_bbox_multi
 )
@@ -87,14 +87,17 @@ def save_annotations(file_path, annotations: list):
             fp, sort_keys=True
         )
 
+
 def flip_annotation(annotation: ObjectAnnotation, span, orient):
     return ObjectAnnotation(
         [flip_polygon(poly, span, orient) for poly in annotation.polys],
         annotation.class_id
     )
 
+
 def flip_annotations(annotations: list, span, orient):
     return [flip_annotation(a, span, orient) for a in annotations]
+
 
 def create_rgb_mask(annos, pallete, shape):
     mask = np.zeros(shape, dtype=np.uint8)
@@ -102,11 +105,13 @@ def create_rgb_mask(annos, pallete, shape):
         mask[anno.mask(shape[:2]) != 0] = pallete[anno.class_id]
     return mask
 
+
 def create_class_mask(annos, shape):
     mask = np.zeros(shape, dtype=np.uint8)
     for anno in annos:
         mask[anno.mask(shape[:2]) != 0] = anno.class_id
     return mask
+
 
 def create_instance_mask(annos, shape):
     mask = np.zeros(shape, dtype=np.uint8)

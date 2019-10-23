@@ -23,6 +23,10 @@ Ctrl + mouse wheel up/down: zoom in/out
     '''
     # [left, bottom, width, height]
     DEFAULT_AXES_POSITION = (0.05, 0.05, 0.9, 0.9)
+    INACTIVE_AXES_COLOR = 'lightgoldenrodyellow'
+    ACTIVE_AXES_COLOR = 'lightyellow'
+    INACTIVE_FIG_COLOR = 'whitesmoke'
+    ACTIVE_FIG_COLOR = 'white'
 
     @classmethod
     def documentation(cls):
@@ -54,7 +58,7 @@ Ctrl + mouse wheel up/down: zoom in/out
 
         self.ax.set_xlabel('col')
         self.ax.set_ylabel('row')
-        self.ax.set_facecolor('lightgoldenrodyellow')
+        self.ax.set_facecolor(self.__class__.INACTIVE_AXES_COLOR)
         self.ax.set_position(axes_pos)
 
         self.cids = []
@@ -201,7 +205,7 @@ Ctrl + mouse wheel up/down: zoom in/out
         try:
             if self.verbose:
                 print('enter_figure', event.canvas.figure)
-            event.canvas.figure.patch.set_facecolor('white')
+            event.canvas.figure.patch.set_facecolor(self.__class__.ACTIVE_FIG_COLOR)
             event.canvas.draw()
         except tk.TclError:
             pass
@@ -210,7 +214,7 @@ Ctrl + mouse wheel up/down: zoom in/out
         try:
             if self.verbose:
                 print('enter_figure', event.canvas.figure)
-            event.canvas.figure.patch.set_facecolor('whitesmoke')
+            event.canvas.figure.patch.set_facecolor(self.__class__.INACTIVE_FIG_COLOR)
             event.canvas.draw()
         except tk.TclError:
             pass
@@ -219,7 +223,7 @@ Ctrl + mouse wheel up/down: zoom in/out
         try:
             if self.verbose:
                 print('enter_axes', event.inaxes)
-            event.inaxes.patch.set_facecolor('lightyellow')
+            event.inaxes.patch.set_facecolor(self.__class__.ACTIVE_AXES_COLOR)
             event.canvas.draw()
         except tk.TclError:
             pass
@@ -228,7 +232,7 @@ Ctrl + mouse wheel up/down: zoom in/out
         try:
             if self.verbose:
                 print('enter_axes', event.inaxes)
-            event.inaxes.patch.set_facecolor('lightgoldenrodyellow')
+            event.inaxes.patch.set_facecolor(self.__class__.INACTIVE_AXES_COLOR)
             event.canvas.draw()
         except tk.TclError:
             pass

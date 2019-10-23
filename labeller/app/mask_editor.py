@@ -1,6 +1,5 @@
 import copy
 import enum
-from functools import partial
 
 import cv2
 import matplotlib.colors as colors
@@ -8,14 +7,14 @@ import numpy as np
 from matplotlib.widgets import Slider, RadioButtons
 
 from .brush import BrushType, BrushInterpreter, BrushTouch, apply_brush_touch
-from .drag_interpreter import PolarDragInterpreter
-from .geometry import Point
-from .image_window import ImageWindow
-from .utils import (preprocess_mask, merge_gc_mask,
-                    grabcut, overlay_mask, threshold_hsv,
-                    HRange, SRange, VRange, get_arc_regions,
-                    fill_holes_gc, largest_connected_component,
-                    filter_by_area, on_caps_lock_off, hide_axes_labels)
+from ..base import (
+    ImageWindow, Point, PolarDragInterpreter,
+    preprocess_mask, merge_gc_mask,
+    grabcut, overlay_mask, threshold_hsv,
+    HRange, SRange, VRange, get_arc_regions,
+    fill_holes_gc, largest_connected_component,
+    filter_by_area, on_caps_lock_off, hide_axes_labels
+)
 
 
 class ViewMode(enum.Enum):
@@ -456,7 +455,7 @@ q/e: switch to previous/next HSV panel view
             hsv_pixels = (np.round(hsv_pixels / [3, 8, 1]) * np.array([3, 8, 1])).astype(np.int)
             hsv_pixels = np.unique(hsv_pixels, axis=0)
 
-            theta = 2*hsv_pixels[:, 0] / 179 * np.pi
+            theta = 2 * hsv_pixels[:, 0] / 179 * np.pi
             r = hsv_pixels[:, 1] / 255
             v = hsv_pixels[:, 2] / 255
             self.hs_panel.scatter(
