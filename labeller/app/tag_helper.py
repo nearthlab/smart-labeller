@@ -234,13 +234,7 @@ class TagHelper(ImageGroupViewer):
         # category of the panels from the top to the bottom
         self.ordered_categories = list(reversed(cat_names))
 
-        # mark progress of the items
-        for id in range(self.num_items):
-            num = self.num_completed_categories(id)
-            color = TagHelper.INACTIVE_TKINTER_COLOR if num == 0 else \
-                TagHelper.INTERMED_TKINTER_COLOR if num < len(self.categories) else \
-                    TagHelper.ACTIVE_TKINTER_COLOR
-            self.image_menubar.listbox.itemconfig(id, bg=color)
+        self.colorize_menubar()
 
         self.clipboard = dict()
         self.history = dict()
@@ -342,6 +336,15 @@ class TagHelper(ImageGroupViewer):
             set_border_color(self.dialogs.get(category).get('panel'), color)
 
         self.refresh()
+
+    def colorize_menubar(self):
+        # mark progress of the items
+        for id in range(self.num_items):
+            num = self.num_completed_categories(id)
+            color = TagHelper.INACTIVE_TKINTER_COLOR if num == 0 else \
+                TagHelper.INTERMED_TKINTER_COLOR if num < len(self.categories) else \
+                    TagHelper.ACTIVE_TKINTER_COLOR
+            self.image_menubar.listbox.itemconfig(id, bg=color)
 
     @property
     def annotation(self):
@@ -451,6 +454,10 @@ class TagHelper(ImageGroupViewer):
         if hasattr(self, 'dialogs'):
             for dialog in self.dialogs.values():
                 dialog.get('buttons').disconnect_events()
+
+    def remove_current_item(self):
+        super(TagHelper, self).remove_current_item()
+        self.colorize_menubar()
 
     def display(self):
         super(TagHelper, self).display()
