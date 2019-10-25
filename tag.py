@@ -2,9 +2,14 @@ import sys
 import traceback
 from datetime import datetime
 
+import matplotlib.pyplot as plt
+
 from labeller import (
     TagHelper, ask_file, MessageBox
 )
+
+plt.rcParams['font.family'] = 'BM HANNA 11yrs old'
+plt.rcParams['font.size'] = 15
 
 if __name__ == '__main__':
     argc = len(sys.argv)

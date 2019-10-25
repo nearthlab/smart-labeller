@@ -1,5 +1,6 @@
 import json
 import os
+from functools import partial
 
 import numpy as np
 from matplotlib.widgets import (
@@ -69,7 +70,7 @@ class CustomRadioButtons(RadioButtons):
         # scale the radius of the circle with the spacing between each one
         circle_radius = (dy / 2) - 0.01
 
-        # defaul to hard-coded value if the radius becomes too large
+        # default to hard-coded value if the radius becomes too large
         if (circle_radius > 0.05):
             circle_radius = 0.05
 
@@ -139,7 +140,7 @@ def set_border_color(ax, color):
 class TagHelper(ImageGroupViewer):
     '''
     [이미지 이동]
-    오른쪽 이미지 리스트에서 파일 이름을 직접 선택하거나
+    오른쪽 이미지 리스트에서 마우스로 파일 이름을 직접 선택하거나
     다음 단축키들을 이용하여 이동할 수 있습니다.
     방향키 →, d: 다음 이미지로 넘기기
     방향키 ←, a: 이전 이미지로 넘기기
@@ -147,13 +148,18 @@ class TagHelper(ImageGroupViewer):
     End: 마지막 이미지로 이동
     Ctrl + F: 레이블이 완료되지 않은 가장 첫 번째 이미지를 찾아서 이동
 
+    [박스 이동]
+    마우스로 직접 선택하여 원하는 박스를 선택하거나
+    마우스 휠을 이용하여 위/아래 박스로 이동할 수 있습니다.
+    혹은 다음 단축키들을 활용할 수 있습니다.
+    Pgup: 아래쪽 박스로 이동
+    Pgdn: 위쪽 박스로 이동
+
     [레이블 변경]
     각각의 박스 안에 있는 레이블을 직접 클릭하거나
     다음 단축키들을 이용하여 레이블을 변경시킬 수 있습니다.
-    방향키 ↑, w: 위쪽 박스로 이동
-    방향키 ↓, s: 아래쪽 박스로 이동
-    Pgup: 선택된 레이블을 위로 옮깁니다.
-    Pgdn: 선택된 레이블을 아래로 옮깁니다.
+    방향키 ↑, w: 위쪽 옵션으로 이동
+    방향키 ↓, s: 아래쪽 옵션으로 이동
     BackSpace, Delete: 현재 레이블을 모두 초기화
 
     [그 외 기능]
@@ -176,9 +182,18 @@ class TagHelper(ImageGroupViewer):
 
     NOT_SPECIFIED_VALUE = ''
 
+    @classmethod
+    def num_specified(cls, annotation):
+        num = 0
+        tag = annotation.get('tag')
+        for value in tag.values():
+            if value != cls.NOT_SPECIFIED_VALUE:
+                num += 1
+        return num
+
     def __init__(self, cat_path):
         with open(cat_path, 'r') as fp:
-            self.categories = json.load(fp)
+            self.__json = json.load(fp)
 
         self.root_dir, cat_file = os.path.split(cat_path)
         self.image_dir = os.path.join(self.root_dir, 'images')
@@ -206,46 +221,64 @@ class TagHelper(ImageGroupViewer):
 
         verify_or_create_directory(self.tags_dir)
 
-        cat_names = sorted(self.categories.keys(), reverse=True)
-        num_cats = len(self.categories)
-        num_options = [len(self.categories.get(category)) for category in cat_names]
+        cat_names = sorted(self.__json.keys(), reverse=True)
+        num_cats = len(self.__json)
+        num_options = [len(self.__json.get(category)) for category in cat_names]
 
         x = 0.7
         width = 0.25
         dy = 1 / (sum(num_options) + len(num_options) + num_cats + 1)
+        ys = [(sum(num_options[:idx]) + 2 * idx + 1) * dy for idx in range(len(cat_names))]
+        heights = [(num_options[idx] + 1) * dy for idx in range(len(cat_names))]
         self.radius = dy / 2
 
-        self.focused_dialog_id = 0
-        self.dialogs = dict()
-        # create panels from the bottom to the top
-        for idx, category in enumerate(cat_names):
-            y = (sum(num_options[:idx]) + 2 * idx + 1) * dy
-            height = (num_options[idx] + 1) * dy
-            panel, buttons = self.create_panel(
-                category, self.categories.get(category),
-                (x, y, width, height),
-                callback=lambda x: self.syncronize_axes()
+        # sort assets from the top to the bottom
+        self.names = list(reversed(cat_names))
+        ys = list(reversed(ys))
+        heights = list(reversed(heights))
+        self.options = [[TagHelper.NOT_SPECIFIED_VALUE] + self.__json.get(name) for name in self.names]
+
+        self.panels = []
+        self.buttons = []
+        for (idx, name), y, height, options in zip(enumerate(self.names), ys, heights, self.options):
+            panel = self.fig.add_axes((x, y, width, height))
+            for pos in ['left', 'top', 'right', 'bottom']:
+                panel.spines[pos].set_linewidth(2)
+            panel.set_title(name)
+            panel.set_facecolor(TagHelper.INACTIVE_COLOR)
+            hide_axes_labels(panel)
+
+            button = CustomRadioButtons(
+                panel, options,
+                activecolor=TagHelper.ACTIVE_BUTTON_COLOR,
+                inactivecolor=TagHelper.INACTIVE_BUTTON_COLOR
             )
-            self.dialogs[category] = {
-                'panel': panel,
-                'buttons': buttons
-            }
-
-        # category of the panels from the top to the bottom
-        self.ordered_categories = list(reversed(cat_names))
-
-        self.colorize_menubar()
+            for circle in button.circles:
+                circle.update({'radius': self.radius})
+            button.on_clicked(partial(self.sync_panel, idx=idx))
+            self.panels.append(panel)
+            self.buttons.append(button)
 
         self.clipboard = dict()
-        self.history = dict()
+        self.focused_panel_idx = 0
+
+        for idx, panel in enumerate(self.panels):
+            set_border_color(panel, 'crimson' if idx == 0 else 'none')
+
+        self.load_progress()
         self.display()
 
-    def create_panel(self, category, options, pos, callback=None):
+    @property
+    def num_categories(self):
+        return len(self.names)
+
+    def create_dialog_box(self, category, options, pos, callback):
         panel = self.fig.add_axes(pos)
         for pos in ['left', 'top', 'right', 'bottom']:
             panel.spines[pos].set_linewidth(2)
         panel.set_title(category)
         panel.set_facecolor(TagHelper.INACTIVE_COLOR)
+
         hide_axes_labels(panel)
         buttons = CustomRadioButtons(
             panel,
@@ -255,16 +288,47 @@ class TagHelper(ImageGroupViewer):
         )
         for circle in buttons.circles:
             circle.update({'radius': self.radius})
-        buttons.on_clicked(callback or (lambda x: self.syncronize_axes()))
+        buttons.on_clicked(callback)
         return panel, buttons
+
+    def sync_panel(self, value, idx):
+        panel = self.panels[idx]
+        options = self.options[idx]
+        option_idx = options.index(value)
+        panel.set_facecolor(
+            TagHelper.INACTIVE_COLOR if option_idx == 0
+            else TagHelper.ACTIVE_COLOR
+        )
+
+    def load_progress(self):
+        for id in range(self.num_items):
+            self.sync_menubar_progress(id, self.load_annotation(id), False)
+        self.image_menubar.listbox.pack()
+
+    def sync_ax_progress(self):
+        num_specified = TagHelper.num_specified(self.annotation)
+        color = TagHelper.INACTIVE_AXES_COLOR if num_specified == 0 else \
+            TagHelper.INTERMED_AXES_COLOR if num_specified < self.num_categories else \
+                TagHelper.ACTIVE_AXES_COLOR
+        self.ax.set_facecolor(color)
+        self.refresh()
+
+    def sync_menubar_progress(self, id, annotation, pack=True):
+        num_specified = TagHelper.num_specified(annotation)
+        color = TagHelper.INACTIVE_TKINTER_COLOR if num_specified == 0 else \
+            TagHelper.INTERMED_TKINTER_COLOR if num_specified < self.num_categories else \
+                TagHelper.ACTIVE_TKINTER_COLOR
+        self.image_menubar.listbox.itemconfig(id, bg=color)
+        if pack:
+            self.image_menubar.listbox.pack()
 
     @property
     def default_annotation(self):
         return {
             'file_name': self.image_name,
             'tag': {
-                category: TagHelper.NOT_SPECIFIED_VALUE
-                for category in self.categories
+                name: TagHelper.NOT_SPECIFIED_VALUE
+                for name in self.names
             }
         }
 
@@ -283,68 +347,28 @@ class TagHelper(ImageGroupViewer):
         name, ext = os.path.splitext(self.get_image_name(id))
         return '{}.json'.format(name)
 
-    def num_completed_categories(self, id):
-        num = 0
-        tag = self.load_annotation(id).get('tag')
-        for value in tag.values():
-            if value != TagHelper.NOT_SPECIFIED_VALUE:
-                num += 1
-        return num
-
-    def is_completed(self, id):
-        tag = self.load_annotation(id).get('tag')
-        for value in tag.values():
-            if value == TagHelper.NOT_SPECIFIED_VALUE:
-                return False
-        return True
-
-    def syncronize_axes(self):
-        isSpecified = []
-
-        for category in self.dialogs:
-            dialog = self.dialogs.get(category)
-            buttons = dialog.get('buttons')
-            value = buttons.value_selected
-
-            try:
-                index = self.categories.get(category).index(value) + 1
-            except:
-                index = 0  # not specified
-
-            isSpecified.append(index > 0)
-
-            panel = dialog.get('panel')
-            panel.set_facecolor(
-                TagHelper.INACTIVE_COLOR if index == 0
-                else TagHelper.ACTIVE_COLOR
-            )
-
-        numSpecified = sum(isSpecified)
-        if numSpecified == 0:
-            self.ax.set_facecolor(TagHelper.INACTIVE_AXES_COLOR)
-            self.image_menubar.listbox.itemconfig(self.id, bg=TagHelper.INACTIVE_TKINTER_COLOR)
-        elif numSpecified < len(self.categories):
-            self.ax.set_facecolor(TagHelper.INTERMED_AXES_COLOR)
-            self.image_menubar.listbox.itemconfig(self.id, bg=TagHelper.INTERMED_TKINTER_COLOR)
-        else:
-            self.ax.set_facecolor(TagHelper.ACTIVE_AXES_COLOR)
-            self.image_menubar.listbox.itemconfig(self.id, bg=TagHelper.ACTIVE_TKINTER_COLOR)
-        self.image_menubar.listbox.pack()
-
-        for idx, category in enumerate(self.ordered_categories):
-            color = 'crimson' if self.focused_dialog_id == idx else 'none'
-            set_border_color(self.dialogs.get(category).get('panel'), color)
-
+    def set_panel_focus(self, panel_idx):
+        set_border_color(self.panels[self.focused_panel_idx], 'none')
+        set_border_color(self.panels[panel_idx], 'crimson')
+        self.focused_panel_idx = panel_idx
         self.refresh()
 
-    def colorize_menubar(self):
-        # mark progress of the items
-        for id in range(self.num_items):
-            num = self.num_completed_categories(id)
-            color = TagHelper.INACTIVE_TKINTER_COLOR if num == 0 else \
-                TagHelper.INTERMED_TKINTER_COLOR if num < len(self.categories) else \
-                    TagHelper.ACTIVE_TKINTER_COLOR
-            self.image_menubar.listbox.itemconfig(id, bg=color)
+    def scroll_panel_focus(self, downward: bool):
+        if downward:
+            panel_idx = (self.focused_panel_idx + 1) % self.num_categories
+        else:
+            panel_idx = (self.focused_panel_idx - 1) % self.num_categories
+
+        self.set_panel_focus(panel_idx)
+
+    def scroll_option(self, downward: bool):
+        annotation = self.annotation
+        name = self.names[self.focused_panel_idx]
+        options = self.options[self.focused_panel_idx]
+        option_id = options.index(annotation.get('tag').get(name))
+        option_id = (option_id + 1) % len(options) if downward else (option_id - 1) % len(options)
+        annotation['tag'][name] = options[option_id]
+        self.annotation = annotation
 
     @property
     def annotation(self):
@@ -354,8 +378,8 @@ class TagHelper(ImageGroupViewer):
         return {
             'file_name': self.image_name,
             'tag': {
-                category: dialog.get('buttons').value_selected
-                for category, dialog in self.dialogs.items()
+                name: button.value_selected
+                for name, button in zip(self.names, self.buttons)
             }
         }
 
@@ -366,21 +390,10 @@ class TagHelper(ImageGroupViewer):
         :param annotation: dict
         :return: None
         '''
-        for category in self.dialogs:
-            value = TagHelper.NOT_SPECIFIED_VALUE
-            tag = annotation.get('tag')
-            if tag is not None:
-                value = tag.get(category) or value
-
-            try:
-                index = self.categories.get(category).index(value) + 1
-            except:
-                index = 0  # not specified
-
-            dialog = self.dialogs.get(category)
-            buttons = dialog.get('buttons')
-            buttons.set_active(index)
-        self.syncronize_axes()
+        for i, name in enumerate(self.names):
+            value = annotation.get('tag').get(name)
+            self.buttons[i].set_active(self.options[i].index(value))
+        self.sync_ax_progress()
 
     def load_annotation(self, id):
         '''
@@ -411,11 +424,11 @@ class TagHelper(ImageGroupViewer):
         :param annotation: dict
         :return: None
         '''
+        self.sync_menubar_progress(self.id, self.annotation)
         tag_path = os.path.join(self.tags_dir, self.tag_name)
         if annotation != self.saved_annotation:
             if annotation == self.default_annotation and os.path.isfile(tag_path):
-                if self.ask_yes_no_question('이 이미지({})에 대한 레이블을 삭제하시겠습니까?'.format(self.image_name)):
-                    os.remove(tag_path)
+                os.remove(tag_path)
             else:
                 with open(tag_path, 'w') as fp:
                     json.dump(annotation, fp)
@@ -444,20 +457,19 @@ class TagHelper(ImageGroupViewer):
 
     def enable_callbacks(self):
         super(TagHelper, self).enable_callbacks()
-        if hasattr(self, 'dialogs'):
-            for dialog in self.dialogs.values():
-                buttons = dialog.get('buttons')
-                buttons.connect_event('button_press_event', buttons._clicked)
+        if hasattr(self, 'buttons'):
+            for button in self.buttons:
+                button.connect_event('button_press_event', button._clicked)
 
     def disable_callbacks(self):
         super(TagHelper, self).disable_callbacks()
-        if hasattr(self, 'dialogs'):
-            for dialog in self.dialogs.values():
-                dialog.get('buttons').disconnect_events()
+        if hasattr(self, 'buttons'):
+            for button in self.buttons:
+                button.disconnect_events()
 
     def remove_current_item(self):
         super(TagHelper, self).remove_current_item()
-        self.colorize_menubar()
+        self.load_progress()
 
     def display(self):
         super(TagHelper, self).display()
@@ -478,6 +490,14 @@ class TagHelper(ImageGroupViewer):
         self.saved_annotation = self.annotation
         super(TagHelper, self).on_image_menubar_select(event)
 
+    def on_scroll(self, event):
+        self.scroll_panel_focus(event.step == -1)
+
+    def on_mouse_press(self, event):
+        super(TagHelper, self).on_mouse_press(event)
+        if event.inaxes in self.panels:
+            self.set_panel_focus(self.panels.index(event.inaxes))
+
     @on_caps_lock_off
     def on_key_press(self, event):
         if event.key in ['left', 'right', 'a', 'd', 'escape', 'home', 'end']:
@@ -485,8 +505,6 @@ class TagHelper(ImageGroupViewer):
             super().on_key_press(event)
             if event.key != 'escape':
                 self.display()
-                self.focused_dialog_id = 0
-                self.syncronize_axes()
         else:
             super().on_key_press(event)
             if event.key in ['delete', 'backspace']:
@@ -499,30 +517,20 @@ class TagHelper(ImageGroupViewer):
                 self.annotation = annotation
             elif event.key == 'ctrl+f':
                 for id in range(self.num_items):
-                    if self.num_completed_categories(id) < len(self.categories):
+                    if TagHelper.num_specified(self.load_annotation(id)) < self.num_categories:
                         if id == self.id:
                             self.show_message('이미 완료되지 않은 가장 첫 번째 이미지를 보고 있습니다.', 'Info')
                             return
                         else:
+                            self.saved_annotation = self.annotation
                             self.id = id
                             self.display()
                             return
                 self.show_message('모든 이미지의 레이블링이 완료된 상태입니다!', 'Info')
+            elif event.key in ['up', 'w', 'down', 's']:
+                self.scroll_option(event.key in ['down', 's'])
             elif event.key in ['pageup', 'pagedown']:
-                annotation = self.annotation
-                category = self.ordered_categories[self.focused_dialog_id]
-                options = [TagHelper.NOT_SPECIFIED_VALUE] + self.categories.get(category)
-                value = annotation.get('tag').get(category)
-                option_id = options.index(value)
-                option_id = (option_id + 1) % len(options) if event.key == 'pagedown' else (option_id - 1) % len(options)
-                annotation['tag'][category] = options[option_id]
-                self.annotation = annotation
-            elif event.key in ['down', 's']:
-                self.focused_dialog_id = (self.focused_dialog_id + 1) % len(self.dialogs)
-                self.syncronize_axes()
-            elif event.key in ['up', 'w']:
-                self.focused_dialog_id = (self.focused_dialog_id - 1) % len(self.dialogs)
-                self.syncronize_axes()
+                self.scroll_panel_focus(event.key == 'pagedown')
             elif event.key in ['ctrl+delete', 'ctrl+backspace']:
                 if self.ask_yes_no_question('이 이미지를 제외하시겠습니까?'):
                     excluded_dir = os.path.join(self.root_dir, 'excluded')
@@ -538,5 +546,3 @@ class TagHelper(ImageGroupViewer):
 
                     self.remove_current_item()
                     self.display()
-                    self.focused_dialog_id = 0
-                    self.syncronize_axes()
