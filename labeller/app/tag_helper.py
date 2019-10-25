@@ -100,7 +100,7 @@ class CustomRadioButtons(RadioButtons):
         self.cnt = 0
         self.observers = {}
 
-    def set_active(self, index):
+    def set_active(self, index, callback_props=None):
         """
         Trigger which radio button to make active.
 
@@ -128,8 +128,9 @@ class CustomRadioButtons(RadioButtons):
 
         if not self.eventson:
             return
+        callback_props = callback_props or dict()
         for cid, func in self.observers.items():
-            func(self.labels[index].get_text())
+            func(self.labels[index].get_text(), **callback_props)
 
 
 def set_border_color(ax, color):
@@ -175,12 +176,15 @@ class TagHelper(ImageGroupViewer):
     INTERMED_TKINTER_COLOR = 'green yellow'
     ACTIVE_TKINTER_COLOR = 'lime green'
 
-    INACTIVE_COLOR = 'darkgray'
-    ACTIVE_COLOR = 'limegreen'
+    INACTIVE_PANEL_COLOR = 'darkgray'
+    ACTIVE_PANEL_COLOR = 'limegreen'
     INACTIVE_BUTTON_COLOR = 'gainsboro'
     ACTIVE_BUTTON_COLOR = 'royalblue'
 
     NOT_SPECIFIED_VALUE = ''
+
+    class Exception(Exception):
+        pass
 
     @classmethod
     def num_specified(cls, annotation):
@@ -192,100 +196,99 @@ class TagHelper(ImageGroupViewer):
         return num
 
     def __init__(self, cat_path):
-        with open(cat_path, 'r') as fp:
-            self.__json = json.load(fp)
+        try:
+            with open(cat_path, 'r') as fp:
+                self.__json = json.load(fp)
 
-        self.root_dir, cat_file = os.path.split(cat_path)
-        self.image_dir = os.path.join(self.root_dir, 'images')
-        self.tags_dir = os.path.join(self.root_dir, 'tags')
-        if not os.path.isdir(self.image_dir):
-            raise Exception(
-                '선택한 {} 파일과 같은 폴더 안에 레이블 하고자 하는 이미지들을 담은 "images"라는 폴더가 있어야 합니다.'.
-                    format(cat_file)
+            self.root_dir, cat_file = os.path.split(cat_path)
+            self.image_dir = os.path.join(self.root_dir, 'images')
+            self.tags_dir = os.path.join(self.root_dir, 'tags')
+            if not os.path.isdir(self.image_dir):
+                raise TagHelper.Exception(
+                    '선택한 {} 파일과 같은 폴더 안에 레이블 하고자 하는 이미지들을 담은 "images"라는 폴더가 있어야 합니다.'.
+                        format(cat_file)
+                )
+
+            super(TagHelper, self).__init__(
+                sorted([os.path.join(self.image_dir, x)
+                        for x in os.listdir(self.image_dir)
+                        if x.lower().endswith('.jpg') or x.lower().endswith('.png') or x.lower().endswith('.bmp')
+                        ]),
+                os.path.basename(cat_path),
+                axes_pos=(0.05, 0.05, 0.6, 0.9),
+                menubar_kwargs={'selectbackground': 'light sky blue'}
             )
 
-        super(TagHelper, self).__init__(
-            sorted([os.path.join(self.image_dir, x)
-                    for x in os.listdir(self.image_dir)
-                    if x.lower().endswith('.jpg') or x.lower().endswith('.png') or x.lower().endswith('.bmp')
-                    ]),
-            os.path.basename(cat_path),
-            axes_pos=(0.05, 0.05, 0.6, 0.9),
-            menubar_kwargs={'selectbackground': 'light sky blue'}
-        )
+            self.image_menubar.listbox.pack()
+            hide_axes_labels(self.ax)
+            self.ax.set_facecolor(TagHelper.INACTIVE_AXES_COLOR)
+            self.set_title(os.path.basename(self.root_dir))
 
-        self.image_menubar.listbox.pack()
-        hide_axes_labels(self.ax)
-        self.ax.set_facecolor(TagHelper.INACTIVE_AXES_COLOR)
-        self.set_title(os.path.basename(self.root_dir))
+            verify_or_create_directory(self.tags_dir)
 
-        verify_or_create_directory(self.tags_dir)
+            cat_names = sorted(self.__json.keys(), reverse=True)
+            num_cats = len(self.__json)
+            num_options = [len(self.__json.get(category)) for category in cat_names]
 
-        cat_names = sorted(self.__json.keys(), reverse=True)
-        num_cats = len(self.__json)
-        num_options = [len(self.__json.get(category)) for category in cat_names]
+            x = 0.7
+            width = 0.25
+            dy = 1 / (sum(num_options) + len(num_options) + num_cats + 1)
+            ys = [(sum(num_options[:idx]) + 2 * idx + 1) * dy for idx in range(len(cat_names))]
+            heights = [(num_options[idx] + 1) * dy for idx in range(len(cat_names))]
+            radius = dy / 2
 
-        x = 0.7
-        width = 0.25
-        dy = 1 / (sum(num_options) + len(num_options) + num_cats + 1)
-        ys = [(sum(num_options[:idx]) + 2 * idx + 1) * dy for idx in range(len(cat_names))]
-        heights = [(num_options[idx] + 1) * dy for idx in range(len(cat_names))]
-        self.radius = dy / 2
+            # sort assets from the top to the bottom
+            self.names = list(reversed(cat_names))
+            ys = list(reversed(ys))
+            heights = list(reversed(heights))
+            self.options = [[TagHelper.NOT_SPECIFIED_VALUE] + self.__json.get(name) for name in self.names]
 
-        # sort assets from the top to the bottom
-        self.names = list(reversed(cat_names))
-        ys = list(reversed(ys))
-        heights = list(reversed(heights))
-        self.options = [[TagHelper.NOT_SPECIFIED_VALUE] + self.__json.get(name) for name in self.names]
+            self.panels = []
+            self.buttons = []
+            for (idx, name), y, height, options in zip(enumerate(self.names), ys, heights, self.options):
+                panel = self.fig.add_axes((x, y, width, height))
+                for pos in ['left', 'top', 'right', 'bottom']:
+                    panel.spines[pos].set_linewidth(2)
+                panel.set_title(name)
+                panel.set_facecolor(TagHelper.INACTIVE_PANEL_COLOR)
+                hide_axes_labels(panel)
 
-        self.panels = []
-        self.buttons = []
-        for (idx, name), y, height, options in zip(enumerate(self.names), ys, heights, self.options):
-            panel = self.fig.add_axes((x, y, width, height))
-            for pos in ['left', 'top', 'right', 'bottom']:
-                panel.spines[pos].set_linewidth(2)
-            panel.set_title(name)
-            panel.set_facecolor(TagHelper.INACTIVE_COLOR)
-            hide_axes_labels(panel)
+                button = CustomRadioButtons(
+                    panel, options,
+                    activecolor=TagHelper.ACTIVE_BUTTON_COLOR,
+                    inactivecolor=TagHelper.INACTIVE_BUTTON_COLOR
+                )
+                for circle in button.circles:
+                    circle.update({'radius': radius})
+                button.on_clicked(partial(self.sync_panel, idx=idx))
+                self.panels.append(panel)
+                self.buttons.append(button)
 
-            button = CustomRadioButtons(
-                panel, options,
-                activecolor=TagHelper.ACTIVE_BUTTON_COLOR,
-                inactivecolor=TagHelper.INACTIVE_BUTTON_COLOR
-            )
-            for circle in button.circles:
-                circle.update({'radius': self.radius})
-            button.on_clicked(partial(self.sync_panel, idx=idx))
-            self.panels.append(panel)
-            self.buttons.append(button)
+            self.clipboard = dict()
+            self.focused_panel_idx = 0
 
-        self.clipboard = dict()
-        self.focused_panel_idx = 0
+            for idx, panel in enumerate(self.panels):
+                set_border_color(panel, 'crimson' if idx == 0 else 'none')
 
-        for idx, panel in enumerate(self.panels):
-            set_border_color(panel, 'crimson' if idx == 0 else 'none')
-
-        self.load_progress()
-        self.display()
+            self.load_progress()
+            self.display()
+        except:
+            raise TagHelper.Exception('카테고리 파일({})을 읽는 중 오류가 발생하였습니다.'.format(cat_path))
 
     @property
     def num_categories(self):
         return len(self.names)
 
-    def sync_panel(self, value, idx):
+    def sync_panel(self, value, idx, sync_progress=True):
         panel = self.panels[idx]
         options = self.options[idx]
         option_idx = options.index(value)
         panel.set_facecolor(
-            TagHelper.INACTIVE_COLOR if option_idx == 0
-            else TagHelper.ACTIVE_COLOR
+            TagHelper.INACTIVE_PANEL_COLOR if option_idx == 0
+            else TagHelper.ACTIVE_PANEL_COLOR
         )
-        self.sync_ax_progress()
-
-    def load_progress(self):
-        for id in range(self.num_items):
-            self.sync_menubar_progress(id, self.load_annotation(id), False)
-        self.image_menubar.listbox.pack()
+        if sync_progress:
+            self.sync_ax_progress()
 
     def sync_ax_progress(self):
         num_specified = TagHelper.num_specified(self.annotation)
@@ -303,6 +306,11 @@ class TagHelper(ImageGroupViewer):
         self.image_menubar.listbox.itemconfig(id, bg=color)
         if pack:
             self.image_menubar.listbox.pack()
+
+    def load_progress(self):
+        for id in range(self.num_items):
+            self.sync_menubar_progress(id, self.load_annotation(id), pack=False)
+        self.image_menubar.listbox.pack()
 
     @property
     def default_annotation(self):
@@ -374,7 +382,10 @@ class TagHelper(ImageGroupViewer):
         '''
         for i, name in enumerate(self.names):
             value = annotation.get('tag').get(name)
-            self.buttons[i].set_active(self.options[i].index(value))
+            self.buttons[i].set_active(
+                self.options[i].index(value),
+                callback_props={'sync_progress': False}
+            )
         self.sync_ax_progress()
 
     def load_annotation(self, id):
@@ -406,16 +417,14 @@ class TagHelper(ImageGroupViewer):
         :param annotation: dict
         :return: None
         '''
-        self.sync_menubar_progress(self.id, self.annotation)
+        self.sync_menubar_progress(self.id, annotation)
         tag_path = os.path.join(self.tags_dir, self.tag_name)
-        if annotation != self.saved_annotation:
-            if annotation == self.default_annotation and os.path.isfile(tag_path):
+        if annotation == self.default_annotation:
+            if os.path.isfile(tag_path):
                 os.remove(tag_path)
-            else:
-                with open(tag_path, 'w') as fp:
-                    json.dump(annotation, fp)
-        elif annotation == self.default_annotation and os.path.isfile(tag_path):
-            os.remove(tag_path)
+        elif annotation != self.saved_annotation:
+            with open(tag_path, 'w') as fp:
+                json.dump(annotation, fp)
 
     '''
     Override parent class methods
@@ -480,7 +489,6 @@ class TagHelper(ImageGroupViewer):
         self.scroll_panel_focus(event.step == -1)
 
     def on_mouse_press(self, event):
-        super(TagHelper, self).on_mouse_press(event)
         if event.inaxes in self.panels:
             self.set_panel_focus(self.panels.index(event.inaxes))
 
