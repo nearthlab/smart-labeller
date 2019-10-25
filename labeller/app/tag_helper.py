@@ -272,25 +272,6 @@ class TagHelper(ImageGroupViewer):
     def num_categories(self):
         return len(self.names)
 
-    def create_dialog_box(self, category, options, pos, callback):
-        panel = self.fig.add_axes(pos)
-        for pos in ['left', 'top', 'right', 'bottom']:
-            panel.spines[pos].set_linewidth(2)
-        panel.set_title(category)
-        panel.set_facecolor(TagHelper.INACTIVE_COLOR)
-
-        hide_axes_labels(panel)
-        buttons = CustomRadioButtons(
-            panel,
-            [TagHelper.NOT_SPECIFIED_VALUE] + options,
-            activecolor=TagHelper.ACTIVE_BUTTON_COLOR,
-            inactivecolor=TagHelper.INACTIVE_BUTTON_COLOR
-        )
-        for circle in buttons.circles:
-            circle.update({'radius': self.radius})
-        buttons.on_clicked(callback)
-        return panel, buttons
-
     def sync_panel(self, value, idx):
         panel = self.panels[idx]
         options = self.options[idx]
@@ -299,6 +280,7 @@ class TagHelper(ImageGroupViewer):
             TagHelper.INACTIVE_COLOR if option_idx == 0
             else TagHelper.ACTIVE_COLOR
         )
+        self.sync_ax_progress()
 
     def load_progress(self):
         for id in range(self.num_items):
@@ -471,6 +453,10 @@ class TagHelper(ImageGroupViewer):
         super(TagHelper, self).remove_current_item()
         self.load_progress()
 
+    def close(self):
+        self.saved_annotation = self.annotation
+        super(TagHelper, self).close()
+
     def display(self):
         super(TagHelper, self).display()
         if self.should_update():
@@ -500,11 +486,10 @@ class TagHelper(ImageGroupViewer):
 
     @on_caps_lock_off
     def on_key_press(self, event):
-        if event.key in ['left', 'right', 'a', 'd', 'escape', 'home', 'end']:
+        if event.key in ['left', 'right', 'a', 'd', 'home', 'end']:
             self.saved_annotation = self.annotation
             super().on_key_press(event)
-            if event.key != 'escape':
-                self.display()
+            self.display()
         else:
             super().on_key_press(event)
             if event.key in ['delete', 'backspace']:

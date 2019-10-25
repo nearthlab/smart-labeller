@@ -31,11 +31,11 @@ if __name__ == '__main__':
             helper = TagHelper(filename)
             helper.mainloop()
 
-    except Exception:
+    except Exception as e:
         with open('{}.error.log'.format(sys.argv[0]), 'a') as fp:
             fp.write('{}\n'.format(datetime.now()))
             fp.write('-' * 40 + '\n')
             traceback.print_exc(file=fp)
             fp.write('-' * 40 + '\n')
-        win = MessageBox('알 수 없는 오류가 발생하였습니다.', 'Error')
+        win = MessageBox(e, 'Error')
         win.mainloop()
